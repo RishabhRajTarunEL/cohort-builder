@@ -8,32 +8,59 @@
 
 @layer base {
   :root {
-    /* Colors - Light Mode */
+    /* Colors - Polly Design System */
     --color-background: #ffffff;
     --color-text: #4d4d4d;
-    --color-text-light: #6b7280;
+    --color-text-light: #808080;
     
-    /* Primary Colors */
-    --color-primary: #2e2846;
-    --color-primary-dark: #000000;
-    --color-primary-light: #e3dff8;
-    
-    /* Accent Colors */
-    --color-accent: #c2f3c5;
-    --color-accent-dark: #035e6e;
-    --color-accent-light: #d4e1ff;
+    /* Primary Colors - Polly Palette */
+    --color-primary-purple: #8E42EE;
+    --color-primary-orange: #F78E12;
+    --color-primary-pink: #EC4899;
+    --color-primary-cyan: #06B6D4;
+    --color-primary-red: #FF004D;
+    --color-primary-blue: #3C5DE2;
+    --color-primary-green: #24CF35;
+    --color-primary-yellow: #F7E217;
+    --color-primary-neutral: #808080;
     
     /* Secondary Colors */
-    --color-secondary: #eff1f8;
-    --color-secondary-dark: #dfe3f3;
+    --color-secondary-purple: #936DC3;
+    --color-secondary-orange: #D98C30;
+    --color-secondary-pink: #D85C99;
+    --color-secondary-cyan: #21A3B9;
+    --color-secondary-red: #CC3361;
+    --color-secondary-blue: #6173BD;
+    
+    /* Neutral Colors */
+    --color-neutral-purple: #968AA6;
+    --color-neutral-orange: #A18768;
+    --color-neutral-pink: #AF859A;
+    --color-neutral-cyan: #3A91A0;
+    --color-neutral-red: #9F6073;
+    --color-neutral-blue: #7A82A4;
+    
+    /* Default Primary (Purple) */
+    --color-primary: #8E42EE;
+    --color-primary-dark: #6A42EE;
+    --color-primary-light: #936DC3;
+    
+    /* Accent Colors */
+    --color-accent: #F78E12;
+    --color-accent-dark: #D98C30;
+    --color-accent-light: #A18768;
+    
+    /* Secondary UI */
+    --color-secondary: #F9FAFB;
+    --color-secondary-dark: #E5E7EB;
     
     /* UI Colors */
-    --color-border: #dfd3ed;
+    --color-border: #E5E7EB;
     --color-light-gray: #d1d5db;
-    --color-success: #6db89f;
-    --color-warning: #d3b582;
-    --color-error: #ef9595;
-    --color-info: #95aee7;
+    --color-success: #24CF35;
+    --color-warning: #F7E217;
+    --color-error: #FF004D;
+    --color-info: #3C5DE2;
     
     /* Shadows */
     --shadow-sm: 0 1px 2px 0 rgba(0, 0, 0, 0.05);
@@ -167,37 +194,221 @@
     @apply bg-secondary p-4 rounded-md;
   }
   
-  /* ========== BUTTONS ========== */
+  /* ========== ICONS ========== */
   
+  /* Ensure icons don't have background colors */
+  svg,
+  img[class*="icon"],
+  i[class*="icon"],
+  .icon {
+    background-color: transparent !important;
+    background: none !important;
+  }
+  
+  /* ========== BUTTONS - Polly Design System ========== */
+  
+  /* Primary Button - Polly Style */
   .btn-primary {
-    background-color: var(--color-primary-light);
-    color: var(--color-primary-dark);
-    @apply py-2 px-4 rounded-sm shadow-sm transition-colors;
-    @apply hover:ring-1 hover:ring-primary;
-    @apply focus:ring-1 focus:ring-primary focus:outline-none;
-    @apply disabled:opacity-50 disabled:cursor-not-allowed;
+    background-color: color-mix(in srgb, var(--color-primary-purple) 80%, black 20%);
+    color: #FFFFFF;
+    border-radius: 0.5rem;
+    font-size: 0.875rem;
+    font-weight: 500;
+    line-height: 1.25rem;
+    transition: background-color 300ms ease-out;
+    @apply py-2 px-5 shadow-sm;
   }
   
+  .btn-primary:hover:not(:disabled) {
+    background-color: color-mix(in srgb, var(--color-primary-purple) 60%, black 40%);
+  }
+  
+  .btn-primary:active:not(:disabled),
+  .btn-primary.pressed {
+    background-color: color-mix(in srgb, var(--color-primary-purple) 50%, black 50%);
+  }
+  
+  .btn-primary:focus-visible {
+    outline: 1px solid color-mix(in srgb, var(--color-primary-purple) 60%, black 40%);
+    outline-offset: 1px;
+  }
+  
+  .btn-primary:disabled {
+    background-color: color-mix(in srgb, var(--color-primary-neutral) 10%, white 90%);
+    color: color-mix(in srgb, var(--color-primary-neutral) 40%, white 60%);
+    cursor: not-allowed;
+  }
+  
+  /* Secondary Button - Polly Style */
   .btn-secondary {
-    background-color: #ffffff;
-    color: var(--color-primary-dark);
-    @apply border border-border py-2 px-4 rounded-sm transition-colors;
-    @apply hover:ring-1 hover:ring-gray-400;
-    @apply focus:ring-1 focus:ring-primary focus:outline-none;
-    @apply disabled:ring-0 disabled:text-gray-300 disabled:cursor-not-allowed;
+    background-color: #FFFFFF;
+    color: color-mix(in srgb, var(--color-primary-neutral) 60%, black 40%);
+    border: 1px solid color-mix(in srgb, var(--color-neutral-purple) 25%, white 75%);
+    border-radius: 0.5rem;
+    font-size: 0.875rem;
+    font-weight: 500;
+    line-height: 1.25rem;
+    transition: background-color 300ms ease-out;
+    @apply py-2 px-4;
   }
   
+  .btn-secondary:hover:not(:disabled) {
+    background-color: color-mix(in srgb, var(--color-primary-purple) 5%, white 95%);
+  }
+  
+  .btn-secondary:active:not(:disabled) {
+    background-color: color-mix(in srgb, var(--color-secondary-purple) 30%, white 70%);
+    color: color-mix(in srgb, var(--color-neutral-purple) 60%, black 40%);
+    border-color: color-mix(in srgb, var(--color-neutral-purple) 50%, white 50%);
+  }
+  
+  .btn-secondary:focus-visible {
+    outline: 1px solid color-mix(in srgb, var(--color-primary-neutral) 60%, black 40%);
+    outline-offset: 1px;
+  }
+  
+  .btn-secondary:disabled {
+    background-color: color-mix(in srgb, var(--color-primary-neutral) 5%, white 95%);
+    color: color-mix(in srgb, var(--color-primary-neutral) 25%, white 75%);
+    border-color: color-mix(in srgb, var(--color-primary-neutral) 25%, white 75%);
+    cursor: not-allowed;
+  }
+  
+  /* Tertiary Button - Polly Style */
+  .btn-tertiary {
+    background-color: transparent;
+    color: color-mix(in srgb, var(--color-primary-neutral) 60%, black 40%);
+    border: none;
+    border-radius: 0.5rem;
+    font-size: 0.875rem;
+    font-weight: 500;
+    line-height: 1.25rem;
+    transition: background-color 300ms ease-out;
+    @apply py-2 px-4 shadow-none;
+  }
+  
+  .btn-tertiary:hover:not(:disabled) {
+    background-color: color-mix(in srgb, var(--color-neutral-purple) 10%, white 90%);
+  }
+  
+  .btn-tertiary:active:not(:disabled) {
+    background-color: color-mix(in srgb, var(--color-neutral-purple) 25%, white 75%);
+  }
+  
+  .btn-tertiary:focus-visible {
+    outline: 1px solid color-mix(in srgb, var(--color-primary-neutral) 60%, black 40%);
+    outline-offset: 1px;
+  }
+  
+  .btn-tertiary:disabled {
+    background-color: color-mix(in srgb, var(--color-primary-neutral) 10%, white 90%);
+    color: color-mix(in srgb, var(--color-primary-neutral) 40%, white 60%);
+    cursor: not-allowed;
+  }
+  
+  /* Elevated Button - Polly Style */
+  .btn-elevated {
+    background-color: #FFFFFF;
+    color: color-mix(in srgb, var(--color-primary-neutral) 60%, black 40%);
+    border: none;
+    border-radius: 0.5rem;
+    font-size: 0.875rem;
+    font-weight: 500;
+    line-height: 1.25rem;
+    box-shadow: 0 2px 4px 0 rgba(0, 0, 0, 0.25);
+    transition: background-color 300ms ease-out;
+    @apply py-2 px-4;
+  }
+  
+  .btn-elevated:hover:not(:disabled) {
+    background-color: color-mix(in srgb, var(--color-primary-purple) 5%, white 95%);
+  }
+  
+  .btn-elevated:active:not(:disabled) {
+    background-color: color-mix(in srgb, var(--color-secondary-purple) 30%, white 70%);
+  }
+  
+  .btn-elevated:focus-visible {
+    outline: 1px solid color-mix(in srgb, var(--color-primary-neutral) 60%, black 40%);
+    outline-offset: 1px;
+  }
+  
+  .btn-elevated:disabled {
+    background-color: color-mix(in srgb, var(--color-primary-neutral) 5%, white 95%);
+    color: color-mix(in srgb, var(--color-primary-neutral) 40%, white 60%);
+    box-shadow: none;
+    cursor: not-allowed;
+  }
+  
+  /* Tonal Button - Polly Style */
+  .btn-tonal {
+    background-color: color-mix(in srgb, var(--color-secondary-purple) 15%, white 85%);
+    color: color-mix(in srgb, var(--color-secondary-purple) 60%, black 40%);
+    border: none;
+    border-radius: 0.5rem;
+    font-size: 0.875rem;
+    font-weight: 500;
+    line-height: 1.25rem;
+    transition: background-color 300ms ease-out;
+    @apply py-2 px-4 shadow-none;
+  }
+  
+  .btn-tonal:hover:not(:disabled) {
+    background-color: color-mix(in srgb, var(--color-secondary-purple) 25%, white 75%);
+  }
+  
+  .btn-tonal:active:not(:disabled),
+  .btn-tonal.selected {
+    background-color: color-mix(in srgb, var(--color-secondary-purple) 40%, white 60%);
+    color: color-mix(in srgb, var(--color-neutral-purple) 60%, black 40%);
+  }
+  
+  .btn-tonal:focus-visible {
+    outline: 1px solid color-mix(in srgb, var(--color-primary-neutral) 60%, black 40%);
+    outline-offset: 1px;
+  }
+  
+  .btn-tonal:disabled {
+    background-color: color-mix(in srgb, var(--color-primary-neutral) 5%, white 95%);
+    color: color-mix(in srgb, var(--color-primary-neutral) 40%, white 60%);
+    cursor: not-allowed;
+  }
+  
+  /* Danger/Error Button - Polly Style */
   .btn-danger {
-    @apply bg-white text-red-700 border border-border py-2 px-4 rounded-sm transition-colors;
-    @apply hover:bg-red-50 hover:ring-1 hover:ring-red-300;
-    @apply focus:bg-red-50 focus:ring-1 focus:ring-red-300 focus:outline-none;
-    @apply disabled:opacity-50 disabled:cursor-not-allowed;
+    background-color: color-mix(in srgb, var(--color-primary-red) 80%, black 20%);
+    color: #FFFFFF;
+    border: none;
+    border-radius: 0.5rem;
+    font-size: 0.875rem;
+    font-weight: 500;
+    line-height: 1.25rem;
+    transition: background-color 300ms ease-out;
+    @apply py-2 px-4 shadow-sm;
   }
   
+  .btn-danger:hover:not(:disabled) {
+    background-color: color-mix(in srgb, var(--color-primary-red) 60%, black 40%);
+  }
+  
+  .btn-danger:active:not(:disabled) {
+    background-color: color-mix(in srgb, var(--color-primary-red) 50%, black 50%);
+  }
+  
+  .btn-danger:focus-visible {
+    outline: 1px solid color-mix(in srgb, var(--color-primary-red) 60%, black 40%);
+    outline-offset: 1px;
+  }
+  
+  .btn-danger:disabled {
+    background-color: color-mix(in srgb, var(--color-primary-neutral) 10%, white 90%);
+    color: color-mix(in srgb, var(--color-primary-neutral) 40%, white 60%);
+    cursor: not-allowed;
+  }
+  
+  /* Legacy text button for backwards compatibility */
   .btn-text {
-    @apply bg-transparent text-primary py-1 px-2 rounded-sm font-medium transition-colors shadow-none;
-    @apply hover:bg-secondary hover:bg-opacity-50;
-    @apply focus:ring-2 focus:ring-primary focus:ring-opacity-30 focus:outline-none;
+    @apply btn-tertiary;
   }
   
   /* Button Sizes */

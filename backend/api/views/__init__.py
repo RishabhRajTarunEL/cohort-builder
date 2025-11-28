@@ -1,4 +1,3 @@
-"""Views package - API endpoint controllers"""
 from .auth_views import (
     CSRFTokenView,
     LoginView,
@@ -7,6 +6,7 @@ from .auth_views import (
     MeView,
     ProfileUpdateView
 )
+
 from .chat_views import (
     ChatStreamView,
     ChatSessionView,
@@ -14,11 +14,14 @@ from .chat_views import (
     ChatActionView,
     ConversationalChatView
 )
+
 from .cohort_project_views import (
     CohortProjectListCreateView,
     CohortProjectDetailView,
-    ChatMessageListCreateView
+    ChatMessageListCreateView,
+    DatabaseSchemaView
 )
+
 from .polly_views import (
     PollyAtlasListView,
     ProcessAtlasView,
@@ -26,6 +29,7 @@ from .polly_views import (
     AtlasTaskStatusView,
     UploadDataDictionaryView
 )
+
 from .cohort_views import (
     CohortViewSet,
     FilterViewSet,
@@ -50,6 +54,7 @@ __all__ = [
     'CohortProjectListCreateView',
     'CohortProjectDetailView',
     'ChatMessageListCreateView',
+    'DatabaseSchemaView',
     # Polly views
     'PollyAtlasListView',
     'ProcessAtlasView',

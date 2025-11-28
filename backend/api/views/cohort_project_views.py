@@ -1,5 +1,5 @@
 """
-API views for cohort project management and chat functionality
+Cohort Project Views
 """
 import logging
 from rest_framework import status
@@ -10,6 +10,9 @@ from django.shortcuts import get_object_or_404
 
 from api.models import CohortProject, ChatMessage, AtlasProcessingTask
 from api.serializers import CohortProjectSerializer, ChatMessageSerializer
+from api.storage import get_gcs_storage
+import json
+from pathlib import Path
 
 logger = logging.getLogger(__name__)
 
@@ -72,7 +75,7 @@ class CohortProjectListCreateView(APIView):
             logger.info(f"Created cohort project {project.id} for user {request.user.id}")
             
             return Response(serializer.data, status=status.HTTP_201_CREATED)
-        
+            
         except Exception as e:
             logger.error(f"Failed to create cohort project: {str(e)}", exc_info=True)
             return Response(
@@ -185,10 +188,69 @@ class ChatMessageListCreateView(APIView):
             
             serializer = ChatMessageSerializer(message)
             return Response(serializer.data, status=status.HTTP_201_CREATED)
-        
+            
         except Exception as e:
             logger.error(f"Failed to create chat message: {str(e)}", exc_info=True)
             return Response(
                 {'detail': f'Failed to create message: {str(e)}'},
+                status=status.HTTP_500_INTERNAL_SERVER_ERROR
+            )
+
+
+class DatabaseSchemaView(APIView):
+    """Get database schema for a cohort project"""
+    permission_classes = (IsAuthenticated,)
+    
+    def get(self, request, project_id):
+        """Get the database schema for a specific cohort project"""
+        try:
+            # Verify the project exists and belongs to the user
+            project = get_object_or_404(CohortProject, id=project_id, user=request.user)
+            
+            # Get the atlas_id from the project
+            atlas_id = project.atlas_id
+            
+            # Try to load schema from GCS
+            try:
+                gcs = get_gcs_storage()
+                gcs_path = f"atlases/{atlas_id}/db_schema.json"
+                
+                # Download schema file from GCS
+                local_path = f"/tmp/db_schema_{atlas_id}.json"
+                gcs.download_file(gcs_path, local_path)
+                
+                # Read and return the schema
+                with open(local_path, 'r') as f:
+                    schema_data = json.load(f)
+                
+                # Clean up temp file
+                Path(local_path).unlink(missing_ok=True)
+                
+                logger.info(f"Successfully loaded schema for project {project_id} from GCS")
+                return Response(schema_data, status=status.HTTP_200_OK)
+                
+            except Exception as gcs_error:
+                logger.warning(f"Failed to load schema from GCS: {str(gcs_error)}")
+                
+                # Fallback: Try to load from local file system
+                local_schema_path = Path(__file__).parent.parent.parent.parent / "frontend" / "app" / "lib" / "db_schema.json"
+                
+                if local_schema_path.exists():
+                    with open(local_schema_path, 'r') as f:
+                        schema_data = json.load(f)
+                    
+                    logger.info(f"Successfully loaded schema for project {project_id} from local fallback")
+                    return Response(schema_data, status=status.HTTP_200_OK)
+                else:
+                    logger.error(f"Schema file not found in GCS or locally for atlas {atlas_id}")
+                    return Response(
+                        {'detail': 'Database schema not found. Please ensure the atlas has been processed.'},
+                        status=status.HTTP_404_NOT_FOUND
+                    )
+            
+        except Exception as e:
+            logger.error(f"Failed to get database schema: {str(e)}", exc_info=True)
+            return Response(
+                {'detail': f'Failed to get schema: {str(e)}'},
                 status=status.HTTP_500_INTERNAL_SERVER_ERROR
             )

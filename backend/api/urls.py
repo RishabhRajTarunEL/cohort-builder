@@ -24,6 +24,7 @@ from api.views import (
     CohortProjectListCreateView,
     CohortProjectDetailView,
     ChatMessageListCreateView,
+    DatabaseSchemaView,
     # Chat views
     ChatStreamView,
     ChatSessionView,
@@ -57,6 +58,7 @@ urlpatterns = [
     path('cohort-projects', CohortProjectListCreateView.as_view(), name='cohort-project-list-create'),
     path('cohort-projects/<int:project_id>', CohortProjectDetailView.as_view(), name='cohort-project-detail'),
     path('cohort-projects/<int:project_id>/messages', ChatMessageListCreateView.as_view(), name='chat-message-list-create'),
+    path('cohort-projects/<int:project_id>/schema', DatabaseSchemaView.as_view(), name='database-schema'),
     
     # Chat/NLQ Agent endpoints
     path('chat/stream', ChatStreamView.as_view(), name='chat-stream'),

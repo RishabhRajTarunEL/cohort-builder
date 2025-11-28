@@ -1,6 +1,6 @@
 import type { ButtonHTMLAttributes, ReactNode } from "react";
 
-type ButtonVariant = "primary" | "accent" | "secondary" | "danger" | "text";
+type ButtonVariant = "primary" | "secondary" | "tertiary" | "elevated" | "tonal" | "danger" | "text";
 type ButtonSize = "sm" | "md" | "lg";
 
 interface ButtonProps extends ButtonHTMLAttributes<HTMLButtonElement> {
@@ -24,8 +24,10 @@ export default function Button({
   // Variant styles
   const variantStyles = {
     primary: "btn-primary",
-    accent: "btn-accent",
     secondary: "btn-secondary",
+    tertiary: "btn-tertiary",
+    elevated: "btn-elevated",
+    tonal: "btn-tonal",
     danger: "btn-danger",
     text: "btn-text",
   };

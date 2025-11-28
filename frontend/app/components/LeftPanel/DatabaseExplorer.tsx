@@ -1,8 +1,9 @@
 'use client';
 
 import React, { useState, useEffect } from 'react';
-import { ChevronDown, ChevronRight, Database, Table } from 'lucide-react';
+import { ChevronDown, ChevronRight, Database, Table, AlertCircle } from 'lucide-react';
 import { convertSchemaToTables } from '@/app/lib/schemaHelper';
+import api from '@/app/lib/api';
 
 interface DatabaseExplorerProps {
   projectId?: string;
@@ -12,21 +13,95 @@ export default function DatabaseExplorer({ projectId }: DatabaseExplorerProps) {
   const [tables, setTables] = useState<any[]>([]);
   const [expandedTables, setExpandedTables] = useState<Set<string>>(new Set());
   const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
-    loadDatabaseSchema();
-  }, []);
+    if (projectId) {
+      loadDatabaseSchemaFromAPI();
+    } else {
+      loadDatabaseSchemaFromLocal();
+    }
+  }, [projectId]);
 
-  const loadDatabaseSchema = () => {
+  const loadDatabaseSchemaFromAPI = async () => {
     try {
-      // Load schema from db_schema.json via helper
-      const schemaToTables = convertSchemaToTables();
+      setLoading(true);
+      setError(null);
+      
+      // Fetch schema from backend API
+      const schemaData = await api.get(`/cohort-projects/${projectId}/schema`);
+      
+      // Convert schema to tables format
+      const schemaToTables = convertSchemaToTablesFromData(schemaData);
       setTables(schemaToTables);
     } catch (error) {
-      console.error('Error loading database schema:', error);
+      console.error('Error loading database schema from API:', error);
+      setError('Failed to load database schema');
+      
+      // Fallback to local schema
+      loadDatabaseSchemaFromLocal();
     } finally {
       setLoading(false);
     }
+  };
+
+  const loadDatabaseSchemaFromLocal = () => {
+    try {
+      // Load schema from db_schema.json via helper (fallback)
+      const schemaToTables = convertSchemaToTables();
+      setTables(schemaToTables);
+      setError(null);
+    } catch (error) {
+      console.error('Error loading database schema:', error);
+      setError('Failed to load database schema');
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const convertSchemaToTablesFromData = (schemaData: any) => {
+    const tableNames = Object.keys(schemaData);
+    
+    return tableNames.map(tableName => {
+      const tableSchema = schemaData[tableName];
+      if (!tableSchema) return null;
+
+      const fields = tableSchema.fields;
+      const columns = Object.entries(fields).map(([fieldName, fieldData]: [string, any]) => {
+        const column: any = {
+          name: fieldName,
+          type: fieldData.field_data_type,
+          description: fieldData.field_description,
+        };
+
+        // Add values if available
+        if (Array.isArray(fieldData.field_unique_values)) {
+          column.values = fieldData.field_unique_values;
+        } else if (fieldData.field_sample_values && fieldData.field_sample_values.length > 0) {
+          column.sample_values = fieldData.field_sample_values;
+        }
+
+        // Add range info for numeric fields
+        if (fieldData.field_data_type === 'int64' || fieldData.field_data_type === 'float64') {
+          const samples = fieldData.field_sample_values;
+          if (samples && samples.length > 0) {
+            column.min = Math.min(...samples);
+            column.max = Math.max(...samples);
+          }
+        }
+
+        column.uniqueness_percent = fieldData.field_uniqueness_percent;
+
+        return column;
+      });
+
+      return {
+        name: tableName,
+        description: tableSchema.table_description,
+        record_count: 0,
+        columns,
+      };
+    }).filter(Boolean);
   };
 
   const toggleTable = (tableName: string) => {
@@ -66,6 +141,12 @@ export default function DatabaseExplorer({ projectId }: DatabaseExplorerProps) {
         <p className="text-xs mt-1" style={{ color: '#6B7280' }}>
           {tables.length} tables available
         </p>
+        {error && (
+          <div className="mt-2 flex items-center gap-2 text-xs" style={{ color: '#FF004D' }}>
+            <AlertCircle className="w-3 h-3" />
+            <span>{error}</span>
+          </div>
+        )}
       </div>
 
       {/* Tables List */}
