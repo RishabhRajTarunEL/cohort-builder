@@ -1,0 +1,241 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+/* Animation for slide up effect */
+@keyframes slideUp {
+  from {
+    opacity: 0;
+    transform: translateY(1rem);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+.animate-slide-up {
+  animation: slideUp 0.3s ease-out;
+}
+
+@layer base {
+  /* Base styles */
+  html {
+    font-size: 14px;
+  }
+  
+  html,
+  body {
+    @apply antialiased;
+  }
+  
+  body {
+    @apply text-text bg-background;
+  }
+  
+  h1,
+  h2,
+  h3,
+  h4,
+  h5,
+  h6 {
+    @apply font-medium text-text;
+  }
+  
+  /* Form elements */
+  input,
+  select,
+  textarea {
+    @apply bg-white border border-border rounded px-3 py-2 transition-colors;
+  }
+}
+
+@layer components {
+  /* Common components */
+  .card {
+    @apply bg-surface border border-border rounded-lg p-4 shadow-sm;
+  }
+  
+  .section {
+    @apply bg-surface p-4 rounded-md border border-border;
+  }
+  
+  /* Buttons */
+  .btn-primary {
+    @apply bg-primary text-white py-2 px-4 rounded shadow-sm transition-colors;
+    @apply hover:bg-primary-hover;
+    @apply focus:ring-2 focus:ring-primary focus:ring-opacity-50 focus:outline-none;
+    @apply disabled:opacity-50 disabled:cursor-not-allowed;
+  }
+  
+  .btn-secondary {
+    @apply bg-secondary text-white py-2 px-4 rounded shadow-sm transition-colors;
+    @apply hover:bg-secondary-hover;
+    @apply focus:ring-2 focus:ring-secondary focus:ring-opacity-50 focus:outline-none;
+    @apply disabled:opacity-50 disabled:cursor-not-allowed;
+  }
+  
+  .btn-success {
+    @apply bg-success text-white py-2 px-4 rounded shadow-sm transition-colors;
+    @apply hover:opacity-90;
+    @apply focus:ring-2 focus:ring-success focus:ring-opacity-50 focus:outline-none;
+  }
+  
+  .btn-danger {
+    @apply bg-error text-white py-2 px-4 rounded shadow-sm transition-colors;
+    @apply hover:opacity-90;
+    @apply focus:ring-2 focus:ring-error focus:ring-opacity-50 focus:outline-none;
+  }
+  
+  .btn-outline {
+    @apply bg-white text-primary border-2 border-primary py-2 px-4 rounded shadow-sm transition-colors;
+    @apply hover:bg-primary hover:text-white;
+    @apply focus:ring-2 focus:ring-primary focus:ring-opacity-50 focus:outline-none;
+    @apply disabled:opacity-50 disabled:cursor-not-allowed;
+  }
+  
+  .btn-text {
+    @apply bg-transparent text-primary py-1 px-2 rounded font-medium transition-colors shadow-none;
+    @apply hover:bg-primary hover:bg-opacity-10;
+    @apply focus:ring-2 focus:ring-primary focus:ring-opacity-30 focus:outline-none;
+  }
+  
+  /* Tables */
+  .table-container {
+    @apply w-full overflow-hidden border border-border rounded-md;
+  }
+  
+  .table {
+    @apply w-full divide-y divide-border;
+  }
+  
+  .table thead {
+    @apply bg-background;
+  }
+  
+  .table th {
+    @apply py-3 px-4 text-left text-sm font-medium text-text;
+  }
+  
+  .table td {
+    @apply py-2 px-4 text-sm text-text whitespace-nowrap;
+  }
+  
+  .table tbody tr {
+    @apply bg-white border-b border-border hover:bg-background;
+  }
+  
+  /* Forms */
+  .form-group {
+    @apply mb-4;
+  }
+  
+  .form-label {
+    @apply block text-sm mb-1 text-text font-medium;
+  }
+  
+  .form-control {
+    @apply w-full border border-border rounded p-2 focus:ring-2 focus:ring-primary focus:ring-opacity-30 focus:border-primary outline-none;
+  }
+  
+  .form-error {
+    @apply text-error text-xs mt-1;
+  }
+  
+  /* Badges */
+  .badge {
+    @apply inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium;
+  }
+  
+  .badge-success {
+    @apply bg-success-bg text-success;
+  }
+  
+  .badge-warning {
+    @apply bg-warning-bg text-yellow;
+  }
+  
+  .badge-error {
+    @apply bg-error-bg text-error;
+  }
+  
+  .badge-info {
+    @apply bg-info-bg text-info;
+  }
+  
+  .badge-primary {
+    @apply bg-primary bg-opacity-10 text-primary;
+  }
+  
+  /* Processing indicator (for loading states) */
+  .processing-indicator {
+    position: absolute;
+    display: block;
+    width: 12px;
+    height: 12px;
+    border-radius: 50%;
+    background-color: #F7E217; /* yellow */
+    box-shadow: 0 0 5px rgba(247, 226, 23, 0.7);
+    animation: pulse 2s cubic-bezier(0.4, 0, 0.6, 1) infinite;
+    pointer-events: none;
+  }
+  
+  @keyframes pulse {
+    0%,
+    100% {
+      opacity: 1;
+    }
+    50% {
+      opacity: 0.5;
+    }
+  }
+}
+
+/* Custom scrollbar styles */
+@layer utilities {
+  .scrollbar-thin {
+    scrollbar-width: thin;
+  }
+  
+  .scrollbar-thumb-gray-300::-webkit-scrollbar-thumb {
+    background-color: #d1d5db;
+    border-radius: 0.25rem;
+  }
+  
+  .scrollbar-track-gray-100::-webkit-scrollbar-track {
+    background-color: #f3f4f6;
+  }
+  
+  /* Webkit based scrollbar styles */
+  .scrollbar-thin::-webkit-scrollbar {
+    width: 8px;
+    height: 8px;
+  }
+  
+  /* Firefox based scrollbar */
+  @supports (scrollbar-width: thin) {
+    .scrollbar-thin {
+      scrollbar-width: thin;
+      scrollbar-color: #d1d5db #f3f4f6;
+    }
+  }
+}
+
+/* Global scrollbar styling with new colors */
+::-webkit-scrollbar {
+  width: 8px;
+  height: 8px;
+}
+
+::-webkit-scrollbar-track {
+  background: #f1f1f1;
+}
+
+::-webkit-scrollbar-thumb {
+  background: #968AA6; /* purple lighter */
+  border-radius: 4px;
+}
+
+::-webkit-scrollbar-thumb:hover {
+  background: #8E42EE; /* primary purple */
+}
