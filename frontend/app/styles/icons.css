@@ -1,0 +1,199 @@
+@font-face {
+  font-display: block;
+  font-family: 'iconset';
+  src: url('/fonts/iconset.eot');
+  src: url('/fonts/iconset.eot#iefix') format('embedded-opentype'),
+    url('/fonts/iconset.ttf') format('truetype'),
+    url('/fonts/iconset.woff') format('woff'),
+    url('/fonts/iconset.svg#Polly-Morph-Icon-Library-16') format('svg');
+}
+
+.polly-icon {
+  font-family: 'iconset' !important;
+  font-style: normal;
+  font-weight: normal;
+  font-variant: normal;
+  text-transform: none;
+  line-height: 1;
+  display: inline-block;
+  /* Better Font Rendering */
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+}
+
+.polly-icon.zoom-out:before { content: '\e946'; }
+.polly-icon.add-circle:before { content: '\e947'; }
+.polly-icon.add-circle-outline:before { content: '\e948'; }
+.polly-icon.remove:before { content: '\e949'; }
+.polly-icon.remove-circle:before { content: '\e94a'; }
+.polly-icon.remove-circle-outline:before { content: '\e94b'; }
+.polly-icon.pipelines-alt:before { content: '\e94c'; }
+.polly-icon.co-scientist:before { content: '\e94d'; }
+.polly-icon.youtube-searched-for:before { content: '\e94e'; }
+.polly-icon.zoom-in:before { content: '\e94f'; }
+.polly-icon.video-icon:before { content: "\e939"; }
+.polly-icon.files-icon:before { content: "\e93a"; }
+.polly-icon.audio-icon:before { content: "\e93b"; }
+.polly-icon.camera-icon:before { content: "\e93c"; }
+.polly-icon.images-icon:before { content: "\e93d"; }
+.polly-icon.polly-xtract:before { content: "\e93e"; }
+.polly-icon.logout-icon:before { content: "\e93f"; }
+.polly-icon.login-icon:before { content: "\e940"; }
+.polly-icon.mic:before { content: "\e941"; }
+.polly-icon.mic-off:before { content: "\e942"; }
+.polly-icon.attach-icon:before { content: "\e943"; }
+.polly-icon.ai-insight:before { content: "\e944"; }
+.polly-icon.polly-kg:before { content: "\e945"; }
+.polly-icon.pending-tasks:before { content: "\e938"; }
+.polly-icon.polly-scout:before { content: "\e933"; }
+.polly-icon.reviewer-tasks-alt:before { content: "\e934"; }
+.polly-icon.collections-alt:before { content: "\e935"; }
+.polly-icon.share:before { content: "\e936"; }
+.polly-icon.chat-history:before { content: "\e937"; }
+.polly-icon.reviewer-tasks:before { content: "\e92e"; }
+.polly-icon.config:before { content: "\e92f"; }
+.polly-icon.collections:before { content: "\e930"; }
+.polly-icon.performance:before { content: "\e931"; }
+.polly-icon.data-product:before { content: "\e932"; }
+.polly-icon.ai-insights:before { content: "\e928"; }
+.polly-icon.ai-knowledge:before { content: "\e92d"; }
+.polly-icon.ai-icon:before { content: "\e92c"; }
+.polly-icon.medicine:before { content: "\e92b"; }
+.polly-icon.cohorts:before { content: "\e92a"; }
+.polly-icon.warning:before { content: "\e929"; }
+.polly-icon.check-circle-done:before { content: "\e924"; }
+.polly-icon.hourglass-running:before { content: "\e925"; }
+.polly-icon.block-cancelled:before { content: "\e926"; }
+.polly-icon.key-icon-alt:before { content: "\e927"; }
+.polly-icon.user-groups:before { content: "\e920"; }
+.polly-icon.details-icons:before { content: "\e921"; }
+.polly-icon.organisation-icon:before { content: "\e922"; }
+.polly-icon.dashboard-icon:before { content: "\e923"; }
+.polly-icon.add-table-column:before { content: "\e90b"; }
+.polly-icon.edit-table-column:before { content: "\e90c"; }
+.polly-icon.add-table-row:before { content: "\e90d"; }
+.polly-icon.edit-table-row:before { content: "\e90e"; }
+.polly-icon.add-table:before { content: "\e90f"; }
+.polly-icon.edit-table:before { content: "\e910"; }
+.polly-icon.comment:before { content: "\e911"; }
+.polly-icon.chat:before { content: "\e912"; }
+.polly-icon.send:before { content: "\e913"; }
+.polly-icon.reply:before { content: "\e914"; }
+.polly-icon.mail:before { content: "\e915"; }
+.polly-icon.thumb_down:before { content: "\e916"; }
+.polly-icon.thumb_down-filled:before { content: "\e917"; }
+.polly-icon.thumb_up:before { content: "\e918"; }
+.polly-icon.thumb_up-filled:before { content: "\e919"; }
+.polly-icon.framework-ontology-flowchart:before { content: "\e91a"; }
+.polly-icon.database-add:before { content: "\e91b"; }
+.polly-icon.database-edit:before { content: "\e91c"; }
+.polly-icon.database-settings:before { content: "\e91d"; }
+.polly-icon.database:before { content: "\e91e"; }
+.polly-icon.key-icon:before { content: "\e91f"; }
+.polly-icon.view-report:before { content: "\e907"; }
+.polly-icon.add-report:before { content: "\e908"; }
+.polly-icon.checkbox-indeterminate:before { content: "\e909"; }
+.polly-icon.checkbox-selected:before { content: "\e90a"; }
+.polly-icon.polly-flow:before { content: "\e903"; }
+.polly-icon.polly-pipelines:before { content: "\e904"; }
+.polly-icon.hamburger-menu-toggle:before { content: "\e905"; }
+.polly-icon.hamburger-menu:before { content: "\e906"; }
+.polly-icon.refresh-icon:before { content: "\e902"; }
+.polly-icon.flag-empty:before { content: "\e900"; }
+.polly-icon.flag-filled:before { content: "\e901"; }
+.polly-icon.loading-icon:before { content: "\3c"; }
+.polly-icon.search:before { content: "\3e"; }
+.polly-icon.drag-handle:before { content: "\3f"; }
+.polly-icon.sort-ascending:before { content: "\a1"; }
+.polly-icon.sort-descending:before { content: "\a2"; }
+.polly-icon.settings:before { content: "\61"; }
+.polly-icon.add-to-shortlist:before { content: "\62"; }
+.polly-icon.shortlist:before { content: "\63"; }
+.polly-icon.upload-file:before { content: "\64"; }
+.polly-icon.download-file:before { content: "\65"; }
+.polly-icon.edit:before { content: "\66"; }
+.polly-icon.duplicate-or-copy:before { content: "\67"; }
+.polly-icon.print:before { content: "\68"; }
+.polly-icon.open-in-new-window:before { content: "\69"; }
+.polly-icon.table-editor:before { content: "\6a"; }
+.polly-icon.table-sort:before { content: "\6b"; }
+.polly-icon.save:before { content: "\6c"; }
+.polly-icon.delete:before { content: "\6d"; }
+.polly-icon.open-folder:before { content: "\6e"; }
+.polly-icon.analyse:before { content: "\6f"; }
+.polly-icon.star-empty:before { content: "\70"; }
+.polly-icon.filter:before { content: "\71"; }
+.polly-icon.add:before { content: "\72"; }
+.polly-icon.contract:before { content: "\73"; }
+.polly-icon.expand:before { content: "\74"; }
+.polly-icon.close:before { content: "\75"; }
+.polly-icon.chevron-up:before { content: "\76"; }
+.polly-icon.chevron-left:before { content: "\77"; }
+.polly-icon.chevron-right:before { content: "\78"; }
+.polly-icon.chevron-down:before { content: "\79"; }
+.polly-icon.caret-up:before { content: "\7a"; }
+.polly-icon.caret-left:before { content: "\41"; }
+.polly-icon.caret-right:before { content: "\42"; }
+.polly-icon.caret-down:before { content: "\43"; }
+.polly-icon.arrow-up:before { content: "\44"; }
+.polly-icon.arrow-left-back:before { content: "\45"; }
+.polly-icon.arrow-right-forward:before { content: "\46"; }
+.polly-icon.arrow-down:before { content: "\47"; }
+.polly-icon.north_east:before { content: "\48"; }
+.polly-icon.north_west:before { content: "\49"; }
+.polly-icon.south_east:before { content: "\4a"; }
+.polly-icon.south_west:before { content: "\4b"; }
+.polly-icon.arrow-forward-large:before { content: "\4c"; }
+.polly-icon.arrow-back-large:before { content: "\4d"; }
+.polly-icon.skip-to-first:before { content: "\4e"; }
+.polly-icon.skip-to-last:before { content: "\4f"; }
+.polly-icon.star-full:before { content: "\50"; }
+.polly-icon.visibility-on:before { content: "\51"; }
+.polly-icon.visibility-off:before { content: "\52"; }
+.polly-icon.pinned:before { content: "\53"; }
+.polly-icon.pin:before { content: "\54"; }
+.polly-icon.star-half:before { content: "\55"; }
+.polly-icon.previous-arrow:before { content: "\56"; }
+.polly-icon.next-arrow:before { content: "\57"; }
+.polly-icon.folder-open:before { content: "\58"; }
+.polly-icon.folder:before { content: "\59"; }
+.polly-icon.create-new-folder:before { content: "\5a"; }
+.polly-icon.upload-folder:before { content: "\60"; }
+.polly-icon.archive:before { content: "\31"; }
+.polly-icon.unarchive:before { content: "\32"; }
+.polly-icon.link:before { content: "\33"; }
+.polly-icon.done:before { content: "\34"; }
+.polly-icon.chart-icon:before { content: "\35"; }
+.polly-icon.document:before { content: "\36"; }
+.polly-icon.code-document:before { content: "\37"; }
+.polly-icon.info:before { content: "\38"; }
+.polly-icon.swap:before { content: "\39"; }
+.polly-icon.description:before { content: "\30"; }
+.polly-icon.history:before { content: "\2d"; }
+.polly-icon.rename:before { content: "\3d"; }
+.polly-icon.pan-move:before { content: "\7e"; }
+.polly-icon.github:before { content: "\21"; }
+.polly-icon.curation:before { content: "\40"; }
+.polly-icon.help-support:before { content: "\23"; }
+.polly-icon.user-profile:before { content: "\24"; }
+.polly-icon.settings-alt:before { content: "\25"; }
+.polly-icon.notification:before { content: "\5e"; }
+.polly-icon.ingestion:before { content: "\26"; }
+.polly-icon.omix-logo-simple:before { content: "\2a"; }
+.polly-icon.workspaces:before { content: "\28"; }
+.polly-icon.application:before { content: "\29"; }
+.polly-icon.users-oa:before { content: "\5f"; }
+.polly-icon.admin:before { content: "\2b"; }
+.polly-icon.cost-wallet:before { content: "\5b"; }
+.polly-icon.view-table:before { content: "\5d"; }
+.polly-icon.view-summary:before { content: "\5c"; }
+.polly-icon.view-split:before { content: "\7b"; }
+.polly-icon.view-list:before { content: "\7d"; }
+.polly-icon.view-card:before { content: "\7c"; }
+.polly-icon.cancel-round:before { content: "\3b"; }
+.polly-icon.user-single:before { content: "\27"; }
+.polly-icon.add-user:before { content: "\3a"; }
+.polly-icon.calendar-event:before { content: "\22"; }
+.polly-icon.calendar-empty:before { content: "\2c"; }
+.polly-icon.calendar-month:before { content: "\2e"; }
+.polly-icon.alarm:before { content: "\2f"; }
