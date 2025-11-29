@@ -27,29 +27,29 @@ const IconButton = React.forwardRef<HTMLButtonElement, IconButtonProps>(
     // Base styles
     const baseStyles = 'inline-flex items-center justify-center font-medium rounded-lg transition-all duration-200 focus:outline-none focus:ring-2 focus:ring-offset-2 disabled:cursor-not-allowed';
 
-    // Variant styles
+    // Variant styles - Clinical Blue Palette
     const variantStyles: Record<IconButtonVariant, string> = {
       primary: disabled
         ? 'bg-gray-300 text-gray-500 cursor-not-allowed'
-        : 'bg-purple-600 text-white hover:bg-purple-700 active:bg-purple-800 focus:ring-purple-500 shadow-sm hover:shadow-md',
+        : 'bg-blue-500 text-white hover:bg-blue-600 active:bg-blue-700 focus:ring-blue-500 shadow-sm hover:shadow-md',
       accent: disabled
         ? 'bg-gray-300 text-gray-500 cursor-not-allowed'
-        : 'bg-blue-600 text-white hover:bg-blue-700 active:bg-blue-800 focus:ring-blue-500 shadow-sm hover:shadow-md',
+        : 'bg-teal-500 text-white hover:bg-teal-600 active:bg-teal-700 focus:ring-teal-500 shadow-sm hover:shadow-md',
       danger: disabled
         ? 'bg-gray-300 text-gray-500 cursor-not-allowed'
-        : 'bg-red-600 text-white hover:bg-red-700 active:bg-red-800 focus:ring-red-500 shadow-sm hover:shadow-md',
+        : 'bg-coral-400 text-white hover:bg-coral-500 active:bg-coral-600 focus:ring-coral-500 shadow-sm hover:shadow-md',
       secondary: disabled
         ? 'bg-gray-100 text-gray-400 border border-gray-200 cursor-not-allowed'
-        : 'bg-white text-gray-700 border border-gray-300 hover:bg-gray-50 active:bg-gray-100 focus:ring-gray-400 shadow-sm',
+        : 'bg-white text-gray-700 border border-gray-300 hover:bg-gray-50 active:bg-gray-100 focus:ring-blue-400 shadow-sm',
       tertiary: disabled
         ? 'bg-transparent text-gray-400 cursor-not-allowed'
-        : 'bg-transparent text-gray-700 hover:bg-gray-100 active:bg-gray-200 focus:ring-gray-400',
+        : 'bg-transparent text-gray-700 hover:bg-gray-100 active:bg-gray-200 focus:ring-blue-400',
       tonal: disabled
         ? 'bg-gray-100 text-gray-400 cursor-not-allowed'
-        : 'bg-purple-100 text-purple-700 hover:bg-purple-200 active:bg-purple-300 focus:ring-purple-500',
+        : 'bg-blue-100 text-blue-700 hover:bg-blue-200 active:bg-blue-300 focus:ring-blue-500',
       elevated: disabled
         ? 'bg-gray-100 text-gray-400 shadow-sm cursor-not-allowed'
-        : 'bg-white text-gray-700 hover:bg-gray-50 active:bg-gray-100 focus:ring-gray-400 shadow-md hover:shadow-lg'
+        : 'bg-white text-gray-700 hover:bg-gray-50 active:bg-gray-100 focus:ring-blue-400 shadow-md hover:shadow-lg'
     };
 
     // Size styles
@@ -76,9 +76,9 @@ const IconButton = React.forwardRef<HTMLButtonElement, IconButtonProps>(
         {...restProps}
       >
         {loading ? (
-          <Loader2 className={`${iconSizeStyles[size]} animate-spin`} />
+          <Loader2 className={`${iconSizeStyles[size]} animate-spin flex-shrink-0`} />
         ) : (
-          <span className={`${iconSizeStyles[size]} flex items-center justify-center`}>{icon}</span>
+          <span className={`${iconSizeStyles[size]} flex items-center justify-center flex-shrink-0`}>{icon}</span>
         )}
       </button>
     );

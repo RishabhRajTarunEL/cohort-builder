@@ -8,6 +8,7 @@ import DateRangePicker from './DateRangePicker';
 import Toggle from './Toggle';
 import CheckboxList from './CheckboxList';
 import TextInput from './TextInput';
+import Tag from '@/app/components/ui/Tag';
 
 export interface CriterionWithUI {
   id: string;
@@ -57,15 +58,13 @@ export default function DynamicCriterionComponent({
       {/* Criterion Header */}
       <div className="p-3 bg-gray-50 border-l-4 border-[#06B6D4] rounded">
         <div className="flex items-center gap-2 mb-1">
-          <span
-            className="text-[10px] px-2 py-0.5 rounded-full font-medium"
-            style={{
-              backgroundColor: criterion.type === 'include' ? '#24CF35' : '#F78E12',
-              color: '#111827',
-            }}
+          <Tag
+            variant={criterion.type === 'include' ? 'purple' : 'orange'}
+            style="dark"
+            size="sm"
           >
             {criterion.type === 'include' ? 'INCLUDE' : 'EXCLUDE'}
-          </span>
+          </Tag>
         </div>
         <p className="text-sm font-medium text-gray-700">{criterion.text}</p>
       </div>

@@ -5,6 +5,7 @@ import { ArrowRight, User, Bot, Loader2, AlertCircle, CheckCircle, XCircle, Cloc
 import { CriteriaChips, SQLPreview, QueryResults } from '@/app/components/criteria';
 import DynamicCriterionComponent from '@/app/components/criteria/DynamicCriterionComponent';
 import { Button } from '@/app/components/ui';
+import Tag from '@/app/components/ui/Tag';
 
 const API_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000/api';
 
@@ -450,15 +451,19 @@ export default function ConversationalChat({ projectId }: ConversationalChatProp
                 const isChanged = fieldMappingChanges[changeKey] && fieldMappingChanges[changeKey] !== mapping.selected;
                 
                 return (
-                  <div key={idx} className={`mb-4 p-3 bg-white rounded border ${isChanged ? 'border-green-400 shadow-sm' : 'border-blue-200'}`}>
+                  <div key={idx} className={`mb-4 p-3 bg-white rounded border`}>
                     <div className="mb-2">
                       <span className="text-xs font-medium text-gray-500 uppercase">Entity:</span>
-                      <span className="ml-2 px-2 py-1 bg-blue-100 text-blue-800 rounded text-sm font-medium">
-                        {mapping.entity}
+                      <span className="ml-2">
+                        <Tag variant="blue" style="light" size="sm">
+                          {mapping.entity}
+                        </Tag>
                       </span>
                       {isChanged && (
-                        <span className="ml-2 px-2 py-1 bg-green-100 text-green-700 rounded text-xs font-medium">
-                          Modified
+                        <span className="ml-2">
+                          <Tag variant="teal" style="light" size="sm">
+                            Modified
+                          </Tag>
                         </span>
                       )}
                     </div>

@@ -4,10 +4,24 @@ import React, { useState, useEffect } from 'react';
 import { ChevronDown, ChevronRight, Database, Table, AlertCircle } from 'lucide-react';
 import { convertSchemaToTables } from '@/app/lib/schemaHelper';
 import api from '@/app/lib/api';
+import Tag from '@/app/components/ui/Tag';
 
 interface DatabaseExplorerProps {
   projectId?: string;
 }
+
+// Helper function to get tag variant based on data type - Polly Palette
+const getDataTypeVariant = (type: string): 'blue' | 'teal' | 'yellow' | 'gray' => {
+  const lowerType = type.toLowerCase();
+  if (lowerType.includes('int') || lowerType.includes('float') || lowerType.includes('number')) {
+    return 'blue'; // Numeric/quantitative data
+  } else if (lowerType.includes('bool')) {
+    return 'teal'; // Boolean data
+  } else if (lowerType.includes('date') || lowerType.includes('time')) {
+    return 'yellow'; // Temporal data
+  }
+  return 'gray'; // String/text types
+};
 
 export default function DatabaseExplorer({ projectId }: DatabaseExplorerProps) {
   const [tables, setTables] = useState<any[]>([]);
@@ -177,12 +191,9 @@ export default function DatabaseExplorer({ projectId }: DatabaseExplorerProps) {
                     {table.name}
                   </span>
                 </div>
-                <span
-                  className="text-xs px-2 py-1 rounded"
-                  style={{ color: '#6B7280', backgroundColor: '#F7E21740' }}
-                >
+                <Tag variant="teal" style="light" size="sm">
                   {table.columns.length} columns
-                </span>
+                </Tag>
               </button>
 
               {/* Columns */}
@@ -201,13 +212,14 @@ export default function DatabaseExplorer({ projectId }: DatabaseExplorerProps) {
                           <div className="font-medium" style={{ color: '#111827' }}>
                             {column.name}
                           </div>
-                          <div className="mt-0.5" style={{ color: '#6B7280' }}>
-                            <span
-                              className="inline-block px-1.5 py-0.5 rounded text-[10px] mr-1"
-                              style={{ backgroundColor: '#24CF3540', color: '#111827' }}
+                          <div className="mt-1">
+                            <Tag 
+                              variant={getDataTypeVariant(column.type)} 
+                              style="light" 
+                              size="sm"
                             >
                               {column.type}
-                            </span>
+                            </Tag>
                           </div>
                           {column.values && column.values.length > 0 && (
                             <div className="text-[10px] mt-1" style={{ color: '#6B7280' }}>

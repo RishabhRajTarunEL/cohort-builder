@@ -2,7 +2,9 @@ import React from 'react';
 import Button from './Button';
 import IconButton from './IconButton';
 import ButtonGroup from './ButtonGroup';
-import { Plus, ChevronLeft, ChevronRight, Lock, ChevronDown, Loader2 } from 'lucide-react';
+import SplitButton from './SplitButton';
+import Tag from './Tag';
+import { Plus, ChevronLeft, ChevronRight, Lock, ChevronDown, Loader2, Save, Copy, Download } from 'lucide-react';
 
 /**
  * ButtonShowcase - Demonstrates all button variants and states
@@ -168,6 +170,157 @@ const ButtonShowcase: React.FC = () => {
           <Button variant="primary" fullWidth>Full Width Primary</Button>
           <Button variant="secondary" fullWidth>Full Width Secondary</Button>
           <Button variant="primary" fullWidth loading>Processing...</Button>
+        </div>
+      </section>
+
+      {/* Split Buttons */}
+      <section>
+        <h2 className="text-xl font-semibold text-gray-800 mb-4">Split Buttons</h2>
+        <div className="space-y-4">
+          <div className="flex flex-wrap gap-3 items-center">
+            <SplitButton
+              variant="primary"
+              icon={<Save />}
+              onMainClick={() => console.log('Save clicked')}
+              menuItems={[
+                { label: 'Save as...', icon: <Copy />, onClick: () => console.log('Save as') },
+                { label: 'Export', icon: <Download />, onClick: () => console.log('Export') },
+              ]}
+            >
+              Save
+            </SplitButton>
+
+            <SplitButton
+              variant="secondary"
+              onMainClick={() => console.log('Export clicked')}
+              menuItems={[
+                { label: 'Export as PDF', onClick: () => console.log('PDF') },
+                { label: 'Export as CSV', onClick: () => console.log('CSV') },
+                { label: 'Export as JSON', onClick: () => console.log('JSON') },
+              ]}
+            >
+              Export
+            </SplitButton>
+
+            <SplitButton
+              variant="accent"
+              onMainClick={() => console.log('Action clicked')}
+              menuItems={[
+                { label: 'Option 1', onClick: () => console.log('Option 1') },
+                { label: 'Option 2', onClick: () => console.log('Option 2') },
+                { label: 'Option 3', disabled: true, onClick: () => console.log('Option 3') },
+              ]}
+            >
+              Actions
+            </SplitButton>
+
+            <SplitButton
+              variant="primary"
+              disabled
+              onMainClick={() => console.log('Disabled')}
+              menuItems={[
+                { label: 'Option 1', onClick: () => console.log('Option 1') },
+              ]}
+            >
+              Disabled
+            </SplitButton>
+
+            <SplitButton
+              variant="primary"
+              loading
+              onMainClick={() => console.log('Loading')}
+              menuItems={[
+                { label: 'Option 1', onClick: () => console.log('Option 1') },
+              ]}
+            >
+              Loading
+            </SplitButton>
+          </div>
+        </div>
+      </section>
+
+      {/* Tags */}
+      <section>
+        <h2 className="text-xl font-semibold text-gray-800 mb-4">Tags</h2>
+        
+        {/* Dark Style Tags - Clinical Palette */}
+        <div className="mb-6">
+          <h3 className="text-sm font-medium text-gray-600 mb-3">Dark Style</h3>
+          <div className="flex flex-wrap gap-2 items-center">
+            <Tag variant="blue" style="dark">Blue (Primary)</Tag>
+            <Tag variant="teal" style="dark">Teal (Data)</Tag>
+            <Tag variant="yellow" style="dark">Amber (Warning)</Tag>
+            <Tag variant="orange" style="dark">Coral (Exclude)</Tag>
+            <Tag variant="gray" style="dark">Slate (Neutral)</Tag>
+            <Tag variant="red" style="dark">Red (Error)</Tag>
+          </div>
+        </div>
+
+        {/* Light Style Tags - Clinical Palette */}
+        <div className="mb-6">
+          <h3 className="text-sm font-medium text-gray-600 mb-3">Light Style</h3>
+          <div className="flex flex-wrap gap-2 items-center">
+            <Tag variant="blue" style="light">Blue (Primary)</Tag>
+            <Tag variant="teal" style="light">Teal (Data)</Tag>
+            <Tag variant="yellow" style="light">Amber (Warning)</Tag>
+            <Tag variant="orange" style="light">Coral (Exclude)</Tag>
+            <Tag variant="gray" style="light">Slate (Neutral)</Tag>
+            <Tag variant="red" style="light">Red (Error)</Tag>
+          </div>
+        </div>
+
+        {/* Tags with Close Button */}
+        <div className="mb-6">
+          <h3 className="text-sm font-medium text-gray-600 mb-3">With Close Button</h3>
+          <div className="flex flex-wrap gap-2 items-center">
+            <Tag variant="blue" style="dark" onClose={() => console.log('Remove blue')}>
+              Removable
+            </Tag>
+            <Tag variant="orange" style="light" onClose={() => console.log('Remove coral')}>
+              Removable
+            </Tag>
+            <Tag variant="teal" style="dark" onClose={() => console.log('Remove teal')}>
+              Removable
+            </Tag>
+            <Tag variant="gray" style="light" onClose={() => console.log('Remove slate')}>
+              Removable
+            </Tag>
+          </div>
+        </div>
+
+        {/* Tag Sizes */}
+        <div className="mb-6">
+          <h3 className="text-sm font-medium text-gray-600 mb-3">Sizes</h3>
+          <div className="flex flex-wrap gap-2 items-center">
+            <Tag variant="blue" style="dark" size="sm">Small</Tag>
+            <Tag variant="blue" style="dark" size="md">Medium</Tag>
+            <Tag variant="blue" style="dark" size="lg">Large</Tag>
+          </div>
+        </div>
+
+        {/* Use Cases - Clinical Context */}
+        <div>
+          <h3 className="text-sm font-medium text-gray-600 mb-3">Use Cases</h3>
+          <div className="space-y-3">
+            <div className="flex flex-wrap gap-2 items-center">
+              <span className="text-sm text-gray-600">Status:</span>
+              <Tag variant="teal" style="light">Active</Tag>
+              <Tag variant="yellow" style="light">Pending</Tag>
+              <Tag variant="orange" style="light">Failed</Tag>
+            </div>
+            <div className="flex flex-wrap gap-2 items-center">
+              <span className="text-sm text-gray-600">Categories:</span>
+              <Tag variant="blue" style="dark" onClose={() => {}}>Clinical Trial</Tag>
+              <Tag variant="teal" style="dark" onClose={() => {}}>Data Analysis</Tag>
+              <Tag variant="gray" style="dark" onClose={() => {}}>Research</Tag>
+            </div>
+            <div className="flex flex-wrap gap-2 items-center">
+              <span className="text-sm text-gray-600">Filters:</span>
+              <Tag variant="blue" style="light" size="sm" onClose={() => {}}>Age: 18-65</Tag>
+              <Tag variant="blue" style="light" size="sm" onClose={() => {}}>Gender: All</Tag>
+              <Tag variant="teal" style="light" size="sm" onClose={() => {}}>Cohort Size: 150</Tag>
+            </div>
+          </div>
         </div>
       </section>
     </div>

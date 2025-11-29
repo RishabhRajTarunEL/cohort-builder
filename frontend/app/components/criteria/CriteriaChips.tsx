@@ -1,5 +1,7 @@
 import { Plus, X } from 'lucide-react';
 
+import Tag from '@/app/components/ui/Tag';
+
 export interface Criterion {
   id: string;
   type: 'include' | 'exclude';
@@ -27,9 +29,6 @@ export default function CriteriaChips({
   return (
     <div className="space-y-3">
       <div className="flex items-center justify-between">
-        <h3 className="text-sm font-medium text-text-secondary">
-          Extracted Criteria
-        </h3>
         {editable && onAdd && (
           <button
             onClick={onAdd}
@@ -45,24 +44,20 @@ export default function CriteriaChips({
         {criteria.map(criterion => (
           <div
             key={criterion.id}
-            className={`p-3 rounded-lg border transition-colors ${
-              criterion.type === 'include' 
-                ? 'border-success bg-success-bg' 
-                : 'border-error bg-error-bg'
-            }`}
+            className={`p-3 rounded-lg border transition-colors`}
           >
             <div className="flex items-start justify-between gap-2">
               <div className="flex-1 min-w-0">
                 {/* Type Badge */}
-                <span
-                  className={`text-[10px] px-2 py-0.5 rounded-full font-medium inline-block mb-2 ${
-                    criterion.type === 'include'
-                      ? 'bg-success text-white'
-                      : 'bg-error text-white'
-                  }`}
-                >
-                  {criterion.type === 'include' ? 'INCLUDE' : 'EXCLUDE'}
-                </span>
+                <div className="mb-2">
+                  <Tag
+                    variant={criterion.type === 'include' ? 'purple' : 'orange'}
+                    style="dark"
+                    size="sm"
+                  >
+                    {criterion.type === 'include' ? 'INCLUDE' : 'EXCLUDE'}
+                  </Tag>
+                </div>
 
                 {/* Criterion Text */}
                 <p className="text-sm font-medium text-text mb-1">
@@ -71,15 +66,13 @@ export default function CriteriaChips({
 
                 {/* Chip */}
                 <div className="flex items-center gap-2">
-                  <span
-                    className={`text-xs px-2 py-1 rounded-md ${
-                      criterion.chip.color === 'blue'
-                        ? 'bg-info-bg text-info'
-                        : 'bg-warning-bg text-yellow'
-                    }`}
+                  <Tag
+                    variant={criterion.chip.color === 'blue' ? 'blue' : 'green'}
+                    style="light"
+                    size="sm"
                   >
                     {criterion.chip.label}
-                  </span>
+                  </Tag>
                   <span className="text-[10px] text-text-tertiary">
                     {criterion.chip.category}
                   </span>

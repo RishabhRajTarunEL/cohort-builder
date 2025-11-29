@@ -59,7 +59,7 @@ export default function LoginPage() {
   };
 
   return (
-    <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-green-400 to-[#8a86dc]">
+    <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-purple-400 to-purple-700">
       <div className="fixed top-6 left-6">
         <h1 className="text-2xl font-bold text-white drop-shadow-lg">
           Cohort Builder

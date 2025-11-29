@@ -3,6 +3,7 @@
 import React from 'react';
 import { Message, Filter } from '@/app/lib/types';
 import { User, Bot, AlertCircle, Plus } from 'lucide-react';
+import Tag from '@/app/components/ui/Tag';
 
 interface MessageBubbleProps {
   message: Message;
@@ -115,15 +116,13 @@ export default function MessageBubble({ message, onApplyFilters }: MessageBubble
                     <div className="flex items-start justify-between gap-2">
                       <div className="flex-1 min-w-0">
                         <div className="flex items-center gap-2 mb-1">
-                          <span
-                            className="text-[10px] px-2 py-0.5 rounded-full font-medium"
-                            style={{
-                              backgroundColor: filter.type === 'include' ? '#24CF35' : '#F78E12',
-                              color: '#111827',
-                            }}
+                          <Tag
+                            variant={filter.type === 'include' ? 'purple' : 'orange'}
+                            style="dark"
+                            size="sm"
                           >
                             {filter.type === 'include' ? 'INCLUDE' : 'EXCLUDE'}
-                          </span>
+                          </Tag>
                         </div>
                         <p className="text-xs font-medium break-words" style={{ color: '#111827' }}>
                           {filter.text}
