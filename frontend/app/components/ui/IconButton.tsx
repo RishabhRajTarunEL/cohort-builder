@@ -1,38 +1,34 @@
 import React from 'react';
 import { Loader2 } from 'lucide-react';
 
-export type ButtonVariant = 'primary' | 'secondary' | 'tertiary' | 'tonal' | 'elevated' | 'accent' | 'danger';
-export type ButtonSize = 'sm' | 'md' | 'lg';
+export type IconButtonVariant = 'primary' | 'secondary' | 'tertiary' | 'tonal' | 'elevated' | 'accent' | 'danger';
+export type IconButtonSize = 'sm' | 'md' | 'lg';
 
-interface ButtonProps extends React.ButtonHTMLAttributes<HTMLButtonElement> {
-  variant?: ButtonVariant;
-  size?: ButtonSize;
+interface IconButtonProps extends React.ButtonHTMLAttributes<HTMLButtonElement> {
+  variant?: IconButtonVariant;
+  size?: IconButtonSize;
   loading?: boolean;
-  icon?: React.ReactNode;
-  iconPosition?: 'left' | 'right';
-  fullWidth?: boolean;
-  children?: React.ReactNode;
+  icon: React.ReactNode;
+  'aria-label': string; // Required for accessibility
 }
 
-const Button = React.forwardRef<HTMLButtonElement, ButtonProps>(
+const IconButton = React.forwardRef<HTMLButtonElement, IconButtonProps>(
   (props, ref) => {
     const {
       variant = 'primary',
       size = 'md',
       loading = false,
       icon,
-      iconPosition = 'left',
-      fullWidth = false,
       disabled = false,
       className = '',
-      children,
+      'aria-label': ariaLabel,
       ...restProps
     } = props;
     // Base styles
     const baseStyles = 'inline-flex items-center justify-center font-medium rounded-lg transition-all duration-200 focus:outline-none focus:ring-2 focus:ring-offset-2 disabled:cursor-not-allowed';
 
     // Variant styles
-    const variantStyles: Record<ButtonVariant, string> = {
+    const variantStyles: Record<IconButtonVariant, string> = {
       primary: disabled
         ? 'bg-gray-300 text-gray-500 cursor-not-allowed'
         : 'bg-purple-600 text-white hover:bg-purple-700 active:bg-purple-800 focus:ring-purple-500 shadow-sm hover:shadow-md',
@@ -57,44 +53,37 @@ const Button = React.forwardRef<HTMLButtonElement, ButtonProps>(
     };
 
     // Size styles
-    const sizeStyles: Record<ButtonSize, string> = {
-      sm: 'px-3 py-1.5 text-sm gap-1.5',
-      md: 'px-4 py-2 text-sm gap-2',
-      lg: 'px-6 py-3 text-base gap-2.5'
+    const sizeStyles: Record<IconButtonSize, string> = {
+      sm: 'p-1.5 w-8 h-8',
+      md: 'p-2 w-10 h-10',
+      lg: 'p-3 w-12 h-12'
     };
 
-    // Width styles
-    const widthStyles = fullWidth ? 'w-full' : '';
-
-    // Icon only styles
-    const iconOnlyStyles = !children ? (size === 'sm' ? 'p-1.5' : size === 'md' ? 'p-2' : 'p-3') : '';
-
-    const combinedClassName = `${baseStyles} ${variantStyles[variant]} ${sizeStyles[size]} ${widthStyles} ${iconOnlyStyles} ${className}`.trim();
-
-    const renderIcon = (position: 'left' | 'right') => {
-      if (loading && position === 'left') {
-        return <Loader2 className={`${size === 'sm' ? 'w-3 h-3' : size === 'md' ? 'w-4 h-4' : 'w-5 h-5'} animate-spin`} />;
-      }
-      if (icon && iconPosition === position && !loading) {
-        return <span className={`${size === 'sm' ? 'w-3 h-3' : size === 'md' ? 'w-4 h-4' : 'w-5 h-5'} flex items-center justify-center`}>{icon}</span>;
-      }
-      return null;
+    const iconSizeStyles: Record<IconButtonSize, string> = {
+      sm: 'w-4 h-4',
+      md: 'w-5 h-5',
+      lg: 'w-6 h-6'
     };
+
+    const combinedClassName = `${baseStyles} ${variantStyles[variant]} ${sizeStyles[size]} ${className}`.trim();
 
     return (
       <button
         ref={ref}
         className={combinedClassName}
         disabled={disabled || loading}
+        aria-label={ariaLabel}
         {...restProps}
       >
-        {renderIcon('left')}
-        {children && <span>{children}</span>}
-        {renderIcon('right')}
+        {loading ? (
+          <Loader2 className={`${iconSizeStyles[size]} animate-spin`} />
+        ) : (
+          <span className={`${iconSizeStyles[size]} flex items-center justify-center`}>{icon}</span>
+        )}
       </button>
     );
   });
 
-Button.displayName = 'Button';
+IconButton.displayName = 'IconButton';
 
-export default Button;
+export default IconButton;

@@ -695,6 +695,7 @@ class ConversationalChatView(APIView):
         try:
             project_id = request.data.get('project_id')
             message = request.data.get('message', '').strip()
+            field_mappings = request.data.get('field_mappings')  # Optional field mappings update
             
             if not project_id or not message:
                 return Response(
@@ -751,15 +752,24 @@ class ConversationalChatView(APIView):
             )
             
             try:
-                # Process message
-                response = agent.process_message(message, history_list)
+                # Process message (with optional field mappings)
+                response = agent.process_message(message, history_list, field_mappings=field_mappings)
+                
+                # Determine message type from ui_components
+                ui_components = response.get('ui_components', [])
+                if isinstance(ui_components, list) and len(ui_components) > 0:
+                    message_type = ui_components[0].get('type', 'text')
+                elif isinstance(ui_components, dict):
+                    message_type = ui_components.get('type', 'text')
+                else:
+                    message_type = 'text'
                 
                 # Save assistant response
                 assistant_msg = ChatMessage.objects.create(
                     cohort_project=project,
                     chat_session=chat_session,
                     role='assistant',
-                    message_type=response.get('ui_components', {}).get('type', 'text'),
+                    message_type=message_type,
                     content=response.get('response_text', ''),
                     metadata=response,
                     stage=response.get('stage', chat_session.current_stage)

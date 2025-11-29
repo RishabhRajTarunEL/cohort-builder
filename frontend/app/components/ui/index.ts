@@ -1,5 +1,9 @@
-export { default as Button } from "./Button";
-export { default as Modal } from "./Modal";
-export { default as Alert } from "./Alert";
-export { default as FormField } from "./FormField";
-export { default as Loading } from "./Loading";
+export { default as Button } from './Button';
+export type { ButtonVariant, ButtonSize } from './Button';
+export { default as IconButton } from './IconButton';
+export type { IconButtonVariant, IconButtonSize } from './IconButton';
+export { default as ButtonGroup } from './ButtonGroup';
+export { default as Alert } from './Alert';
+export { default as Loading } from './Loading';
+export { default as Modal } from './Modal';
+export { default as FormField } from './FormField';

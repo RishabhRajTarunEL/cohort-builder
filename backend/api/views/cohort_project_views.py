@@ -213,7 +213,7 @@ class DatabaseSchemaView(APIView):
             # Try to load schema from GCS
             try:
                 gcs = get_gcs_storage()
-                gcs_path = f"atlases/{atlas_id}/db_schema.json"
+                gcs_path = f"atlases/{atlas_id}/schema.json"
                 
                 # Download schema file from GCS
                 local_path = f"/tmp/db_schema_{atlas_id}.json"

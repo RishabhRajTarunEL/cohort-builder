@@ -109,8 +109,8 @@ def _determine_component_type(
     """
     data_type_lower = data_type.lower()
     
-    # Boolean types
-    if data_type_lower in ['bool', 'boolean'] or cardinality == 2:
+    # Boolean types - ONLY for actual boolean data types
+    if data_type_lower in ['bool', 'boolean']:
         return _generate_toggle_component(field_info, unique_values, table_field)
     
     # Date/Time types
@@ -127,13 +127,11 @@ def _determine_component_type(
             return _generate_number_input_component(field_info, entity, table_field)
     
     # Categorical/String types
-    if cardinality <= 8:
+    # < 10 items: show checkboxes
+    # >= 10 items: show autocomplete with checkboxes
+    if cardinality < 10:
         return _generate_checkbox_list_component(field_info, unique_values, table_field)
-    elif cardinality <= 20:
-        return _generate_dropdown_component(field_info, unique_values, table_field)
-    elif cardinality <= 50:
-        return _generate_multiselect_component(field_info, unique_values, table_field)
-    else:  # > 50
+    else:
         return _generate_autocomplete_component(field_info, unique_values, table_field)
 
 
@@ -246,7 +244,7 @@ def _generate_range_slider_component(
         "type": "range_slider",
         "config": {
             "field": table_field,
-            "label": field_info.get('field_description', table_field),
+            "label": table_field,
             "data_type": field_info.get('field_data_type'),
             "unit": field_info.get('unit', ''),
             "min": value_range.get('min', 0),
@@ -285,7 +283,7 @@ def _generate_number_input_component(
         "type": "number_input",
         "config": {
             "field": table_field,
-            "label": field_info.get('field_description', table_field),
+            "label": table_field,
             "data_type": field_info.get('field_data_type'),
             "unit": field_info.get('unit', ''),
             "min": 0,
@@ -330,7 +328,7 @@ def _generate_dropdown_component(
         "type": "dropdown_single",
         "config": {
             "field": table_field,
-            "label": field_info.get('field_description', table_field),
+            "label": table_field,
             "data_type": "string",
             "current_value": unique_values[0] if unique_values else None,
             "placeholder": f"Select {field_info.get('field_description', 'value')}",
@@ -367,7 +365,7 @@ def _generate_multiselect_component(
         "type": "multiselect_dropdown",
         "config": {
             "field": table_field,
-            "label": field_info.get('field_description', table_field),
+            "label": table_field,
             "data_type": "string",
             "current_values": [],
             "placeholder": f"Select one or more {field_info.get('field_description', 'values')}",
@@ -401,7 +399,7 @@ def _generate_autocomplete_component(
         "type": "autocomplete",
         "config": {
             "field": table_field,
-            "label": field_info.get('field_description', table_field),
+            "label": table_field,
             "data_type": "string",
             "current_value": "",
             "placeholder": f"Type to search {field_info.get('field_description', 'values')}...",
@@ -448,7 +446,7 @@ def _generate_date_range_component(
         "type": "date_range_picker",
         "config": {
             "field": table_field,
-            "label": field_info.get('field_description', table_field),
+            "label": table_field,
             "data_type": "date",
             "current_operator": operator,
             "current_value": current_value,
@@ -493,7 +491,7 @@ def _generate_toggle_component(
         "type": "toggle",
         "config": {
             "field": table_field,
-            "label": field_info.get('field_description', table_field),
+            "label": table_field,
             "data_type": "boolean",
             "current_value": True,
             "on_label": on_label,
@@ -532,7 +530,7 @@ def _generate_checkbox_list_component(
         "type": "checkbox_list",
         "config": {
             "field": table_field,
-            "label": field_info.get('field_description', table_field),
+            "label": table_field,
             "data_type": "string",
             "current_values": [],
             "layout": "vertical",

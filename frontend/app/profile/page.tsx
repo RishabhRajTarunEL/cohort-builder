@@ -265,7 +265,7 @@ export default function ProfilePage() {
                     type="submit"
                     disabled={isSaving}
                     variant="accent"
-                    isLoading={isSaving}
+                    loading={isSaving}
                   >
                     <Save className="w-4 h-4 mr-2" />
                     Save Changes

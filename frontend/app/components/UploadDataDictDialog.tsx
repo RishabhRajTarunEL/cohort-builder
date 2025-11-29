@@ -211,7 +211,7 @@ export default function UploadDataDictDialog({
             onClick={handleUpload}
             disabled={!selectedFile || isUploading || uploadSuccess}
             variant="primary"
-            isLoading={isUploading}
+            loading={isUploading}
           >
             {isUploading ? 'Uploading...' : 'Upload & Process'}
           </Button>

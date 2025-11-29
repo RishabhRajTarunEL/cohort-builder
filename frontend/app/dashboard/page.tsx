@@ -261,7 +261,7 @@ export default function DashboardPage() {
             onClick={fetchAtlases}
             disabled={isLoading}
             variant="accent"
-            isLoading={isLoading}
+            loading={isLoading}
             className="shadow-lg"
           >
             <Activity size={20} strokeWidth={2.5} className="mr-2" />
@@ -383,7 +383,7 @@ export default function DashboardPage() {
                     }
                     variant={processingTasks[atlas.atlas_id]?.status === 'Failed' ? 'danger' : 'accent'}
                     className="w-full"
-                    isLoading={processingTasks[atlas.atlas_id] && processingTasks[atlas.atlas_id].status !== 'Failed'}
+                    loading={processingTasks[atlas.atlas_id] && processingTasks[atlas.atlas_id].status !== 'Failed'}
                   >
                     {processingTasks[atlas.atlas_id] ? (
                       processingTasks[atlas.atlas_id].status === 'Failed' ? (

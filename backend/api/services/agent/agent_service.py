@@ -860,13 +860,21 @@ Available fields in {table}:
             mapping_context = {}
             for entity, mapping in criterion.get('db_mappings', {}).items():
                 field = mapping.get('table.field')
-                # Use current_value if set by user, otherwise fall back to mapped_concept
-                value = mapping.get('current_value')
-                if value is None:
-                    # Default to mapped_concept if no user modification
-                    value = mapping.get('mapped_concept')
                 
+                # Try to get value from multiple possible locations
+                value = mapping.get('current_value')
                 operator = mapping.get('current_operator', 'equals')
+                
+                # If not found directly, check inside ui_component.config
+                if value is None and 'ui_component' in mapping:
+                    ui_config = mapping.get('ui_component', {}).get('config', {})
+                    value = ui_config.get('current_value')
+                    if operator == 'equals':  # Only override if not already set
+                        operator = ui_config.get('current_operator', 'equals')
+                
+                # Fall back to mapped_concept if still no value
+                if value is None:
+                    value = mapping.get('mapped_concept')
                 
                 if field and value is not None:
                     mapping_context[entity] = {

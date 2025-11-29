@@ -93,7 +93,7 @@ export default function CreateCohortDialog({
             type="submit"
             disabled={isSubmitting || !projectName.trim()}
             variant="accent"
-            isLoading={isSubmitting}
+            loading={isSubmitting}
             className="flex-1"
           >
             Start Cohort

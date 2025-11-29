@@ -130,9 +130,6 @@ export default function Autocomplete({
     <div className="p-4 border rounded-lg bg-white" ref={wrapperRef}>
       {/* Header */}
       <div className="mb-3">
-        <label className="text-sm font-medium text-gray-700 block mb-1">
-          {config.label}
-        </label>
         <p className="text-xs text-gray-500">{config.field}</p>
       </div>
 

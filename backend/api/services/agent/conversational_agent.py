@@ -78,7 +78,8 @@ class ConversationalAgent:
     def process_message(
         self,
         user_message: str,
-        conversation_history: List[Dict[str, Any]]
+        conversation_history: List[Dict[str, Any]],
+        field_mappings: Optional[List[Dict[str, Any]]] = None
     ) -> Dict[str, Any]:
         """
         Process a user message in the context of the conversation.
@@ -86,6 +87,7 @@ class ConversationalAgent:
         Args:
             user_message: The user's input message
             conversation_history: List of previous messages
+            field_mappings: Optional updated field mappings from UI
             
         Returns:
             Response dict with:
@@ -97,6 +99,11 @@ class ConversationalAgent:
         
         # Reconstruct state from conversation history
         self._reconstruct_state_from_history(conversation_history)
+        
+        # If field mappings are provided, update the schema mappings in state
+        if field_mappings:
+            logger.info(f"Received updated field mappings: {len(field_mappings)} mappings")
+            return self._handle_field_mapping_update(field_mappings)
         
         # Determine user intent and next action (using improved logic)
         decision = self._determine_user_intent(user_message, conversation_history)
@@ -636,12 +643,135 @@ Response (strict JSON):"""
                     'next_prompt': "Do these look better? Say 'yes' to proceed or make more changes."
                 }
             
-            # Re-extract criteria with modifications as feedback
-            feedback = modifications or message
-            result = self.agent.process_stage_0("", feedback=feedback)
+            # Check if user is adding new criteria
+            msg_lower = message.lower().strip()
+            add_keywords = ['add', 'also', 'and']
+            is_add = any(keyword in msg_lower for keyword in add_keywords)
             
-            self.state.criteria = result.get('criteria', [])
+            logger.info(f"Edit handler: message='{message}', is_add={is_add}, has_criteria={len(self.state.criteria) > 0}")
             
+            if is_add and self.state.criteria:
+                # User wants to ADD to existing criteria
+                # Build context with existing criteria
+                existing_criteria_text = "\n".join([
+                    f"- {crit.get('type', 'include').upper()}: {crit.get('text', '')}"
+                    for crit in self.state.criteria
+                ])
+                
+                # Extract only NEW criteria from the user's message
+                feedback = f"""IMPORTANT: The user already has these criteria:
+{existing_criteria_text}
+
+USER'S NEW REQUEST: {modifications or message}
+
+TASK: Extract ONLY the NEW criteria mentioned in the user's request above.
+Do NOT include any of the existing criteria listed above.
+Only extract what is NEW in the user's request.
+
+Example:
+If existing criteria include "have diabetes" and user says "add hypertension",
+you should ONLY extract "have hypertension" as a new criterion."""
+                
+                result = self.agent.process_stage_0("", feedback=feedback)
+                new_criteria = result.get('criteria', [])
+                
+                logger.info(f"Extracted {len(new_criteria)} new criteria to append to {len(self.state.criteria)} existing")
+                
+                # Append new criteria to existing ones (with unique IDs)
+                next_id = len(self.state.criteria)
+                for idx, crit in enumerate(new_criteria):
+                    crit['id'] = f"c{next_id + idx}"
+                
+                self.state.criteria.extend(new_criteria)
+                
+                logger.info(f"After append: total {len(self.state.criteria)} criteria")
+                
+                return {
+                    'response_text': f"I've added {len(new_criteria)} new criterion/criteria to your existing ones:",
+                    'ui_components': {
+                        'type': 'criteria_chips',
+                        'data': self.state.criteria
+                    },
+                    'stage': 0,
+                    'metadata': {
+                        'stage': 0,
+                        'criteria': self.state.criteria,
+                        'status': 'Criteria updated',
+                        'actions': ['approve', 'edit', 'add_criterion']
+                    },
+                    'next_prompt': "Do these look good? Say 'yes' to proceed or make more changes."
+                }
+            else:
+                # Check if user wants to REPLACE/MODIFY specific criteria
+                replace_keywords = ['instead of', 'change', 'replace', 'no i want', "don't want", 'not', 'include', 'exclude']
+                is_replace = any(keyword in msg_lower for keyword in replace_keywords)
+                
+                if is_replace and self.state.criteria:
+                    # User wants to MODIFY specific criteria while keeping others
+                    existing_criteria_text = "\n".join([
+                        f"- {crit.get('type', 'include').upper()}: {crit.get('text', '')}"
+                        for crit in self.state.criteria
+                    ])
+                    
+                    feedback = f"""IMPORTANT: The user currently has these criteria:
+{existing_criteria_text}
+
+USER'S MODIFICATION REQUEST: {modifications or message}
+
+TASK: Based on the user's request, provide the COMPLETE updated list of criteria.
+- If the user says "instead of X i want Y", replace X with Y but KEEP all other criteria
+- If the user says "no i want X" or "change to X", intelligently determine what to replace with X based on context
+- PRESERVE all criteria that are not being modified
+- Return ALL criteria in the final list (both modified and unchanged ones)
+
+Example 1:
+Current: ["are female", "are asian"]
+User says: "instead of female i want male"
+Result: ["are male", "are asian"]
+
+Example 2:
+Current: ["are female", "are asian", "have diabetes"]
+User says: "no i want male"
+Result: ["are male", "are asian", "have diabetes"]  (only gender changed)
+
+Example 3:
+Current: ["are female", "are asian"]
+User says: "change asian to caucasian"
+Result: ["are female", "are caucasian"]"""
+                    
+                    result = self.agent.process_stage_0("", feedback=feedback)
+                    new_criteria = result.get('criteria', [])
+                    
+                    logger.info(f"Replace operation: old count={len(self.state.criteria)}, new count={len(new_criteria)}")
+                    
+                    # Assign IDs to new criteria
+                    for idx, crit in enumerate(new_criteria):
+                        crit['id'] = f"c{idx}"
+                    
+                    self.state.criteria = new_criteria
+                    
+                    return {
+                        'response_text': "I've updated the criteria based on your feedback:",
+                        'ui_components': {
+                            'type': 'criteria_chips',
+                            'data': self.state.criteria
+                        },
+                        'stage': 0,
+                        'metadata': {
+                            'stage': 0,
+                            'criteria': self.state.criteria,
+                            'status': 'Criteria updated',
+                            'actions': ['approve', 'edit', 'add_criterion']
+                        },
+                        'next_prompt': "Do these look better? Say 'yes' to proceed or make more changes."
+                    }
+                else:
+                    # User wants to start over with completely new criteria
+                    feedback = modifications or message
+                    result = self.agent.process_stage_0("", feedback=feedback)
+
+                    self.state.criteria = result.get('criteria', [])
+
             return {
                 'response_text': "I've updated the criteria based on your feedback:",
                 'ui_components': {
@@ -652,6 +782,7 @@ Response (strict JSON):"""
                 'metadata': result,
                 'next_prompt': "Do these look better? Say 'yes' to proceed."
             }
+
         
         elif self.state.current_stage == 1:
             # Modify schema-mapped criteria
@@ -680,12 +811,198 @@ Response (strict JSON):"""
             }
         
         elif self.state.current_stage >= 2:
-            # For SQL stage and beyond, go back to criteria editing
+            # For SQL stage and beyond, go back to stage 0 for criteria editing
+            self.state.current_stage = 0
+            
+            # Process the edit at stage 0
+            # Check if this is a deletion request
+            msg_lower = message.lower().strip()
+            delete_keywords = ['remove', 'delete', 'drop', 'take out', 'get rid of']
+            is_delete = any(keyword in msg_lower for keyword in delete_keywords)
+            
+            if is_delete:
+                # Handle deletion
+                for keyword in delete_keywords:
+                    if keyword in msg_lower:
+                        delete_text = msg_lower.split(keyword, 1)[1].strip()
+                        break
+                
+                updated_criteria = []
+                removed = False
+                for crit in self.state.criteria:
+                    crit_text = crit.get('text', '').lower()
+                    crit_label = crit.get('chip', {}).get('label', '').lower()
+                    
+                    if delete_text not in crit_text and delete_text not in crit_label:
+                        updated_criteria.append(crit)
+                    else:
+                        removed = True
+                        logger.info(f"Removing criterion: {crit.get('text')}")
+                
+                self.state.criteria = updated_criteria
+                
+                response_text = f"I've removed the criterion matching '{delete_text}'." if removed else f"I couldn't find a criterion matching '{delete_text}' to remove."
+                
+                return {
+                    'response_text': response_text,
+                    'ui_components': {
+                        'type': 'criteria_chips',
+                        'data': updated_criteria
+                    },
+                    'stage': 0,
+                    'metadata': {
+                        'stage': 0,
+                        'criteria': updated_criteria,
+                        'status': 'Criteria updated',
+                        'actions': ['approve', 'edit', 'add_criterion']
+                    },
+                    'next_prompt': "Do these look better? Say 'yes' to proceed or make more changes."
+                }
+            
+            # Check for add operations
+            add_keywords = ['add', 'also', 'and']
+            is_add = any(keyword in msg_lower for keyword in add_keywords)
+            
+            if is_add:
+                existing_criteria_text = "\n".join([
+                    f"- {crit.get('type', 'include').upper()}: {crit.get('text', '')}"
+                    for crit in self.state.criteria
+                ])
+                
+                feedback = f"""IMPORTANT: The user already has these criteria:
+{existing_criteria_text}
+
+USER'S NEW REQUEST: {modifications or message}
+
+TASK: Extract ONLY the NEW criteria mentioned in the user's request above.
+Do NOT include any of the existing criteria listed above.
+Only extract what is NEW in the user's request."""
+                
+                result = self.agent.process_stage_0("", feedback=feedback)
+                new_criteria = result.get('criteria', [])
+                
+                next_id = len(self.state.criteria)
+                for idx, crit in enumerate(new_criteria):
+                    crit['id'] = f"c{next_id + idx}"
+                
+                self.state.criteria.extend(new_criteria)
+                
+                return {
+                    'response_text': f"I've added {len(new_criteria)} new criterion/criteria:",
+                    'ui_components': {
+                        'type': 'criteria_chips',
+                        'data': self.state.criteria
+                    },
+                    'stage': 0,
+                    'metadata': {
+                        'stage': 0,
+                        'criteria': self.state.criteria,
+                        'status': 'Criteria updated',
+                        'actions': ['approve', 'edit', 'add_criterion']
+                    },
+                    'next_prompt': "Do these look good? Say 'yes' to proceed or make more changes."
+                }
+            
+            # Check for replace operations
+            replace_keywords = ['instead of', 'change', 'replace', 'no i want', "don't want", 'not', 'include', 'exclude']
+            is_replace = any(keyword in msg_lower for keyword in replace_keywords)
+            
+            if is_replace:
+                existing_criteria_text = "\n".join([
+                    f"- {crit.get('type', 'include').upper()}: {crit.get('text', '')}"
+                    for crit in self.state.criteria
+                ])
+                
+                feedback = f"""IMPORTANT: The user currently has these criteria:
+{existing_criteria_text}
+
+USER'S MODIFICATION REQUEST: {modifications or message}
+
+TASK: Based on the user's request, provide the COMPLETE updated list of criteria.
+Return ALL criteria in the final list (both modified and unchanged ones)."""
+                
+                result = self.agent.process_stage_0("", feedback=feedback)
+                new_criteria = result.get('criteria', [])
+                
+                # Deduplicate: Remove contradictory criteria (same text, different type)
+                seen_texts = {}
+                deduplicated = []
+                for crit in new_criteria:
+                    text_normalized = crit.get('text', '').lower().strip()
+                    crit_type = crit.get('type', 'include')
+                    
+                    if text_normalized in seen_texts:
+                        # Duplicate found - keep the newer one (prefer include over exclude)
+                        prev_crit = seen_texts[text_normalized]
+                        if crit_type == 'include':
+                            # Replace previous with current (include wins)
+                            deduplicated = [c for c in deduplicated if c.get('text', '').lower().strip() != text_normalized]
+                            deduplicated.append(crit)
+                            seen_texts[text_normalized] = crit
+                        # else: keep previous, skip current
+                    else:
+                        deduplicated.append(crit)
+                        seen_texts[text_normalized] = crit
+                
+                # Assign IDs
+                for idx, crit in enumerate(deduplicated):
+                    crit['id'] = f"c{idx}"
+                
+                self.state.criteria = deduplicated
+                
+                return {
+                    'response_text': "I've updated the criteria based on your feedback:",
+                    'ui_components': {
+                        'type': 'criteria_chips',
+                        'data': self.state.criteria
+                    },
+                    'stage': 0,
+                    'metadata': {
+                        'stage': 0,
+                        'criteria': self.state.criteria,
+                        'status': 'Criteria updated',
+                        'actions': ['approve', 'edit', 'add_criterion']
+                    },
+                    'next_prompt': "Do these look better? Say 'yes' to proceed or make more changes."
+                }
+            
+            # Default: treat as new criteria extraction
+            result = self.agent.process_stage_0("", feedback=modifications or message)
+            new_criteria = result.get('criteria', [])
+            
+            # Deduplicate: Remove contradictory criteria
+            seen_texts = {}
+            deduplicated = []
+            for crit in new_criteria:
+                text_normalized = crit.get('text', '').lower().strip()
+                crit_type = crit.get('type', 'include')
+                
+                if text_normalized in seen_texts:
+                    prev_crit = seen_texts[text_normalized]
+                    if crit_type == 'include':
+                        deduplicated = [c for c in deduplicated if c.get('text', '').lower().strip() != text_normalized]
+                        deduplicated.append(crit)
+                        seen_texts[text_normalized] = crit
+                else:
+                    deduplicated.append(crit)
+                    seen_texts[text_normalized] = crit
+            
+            self.state.criteria = deduplicated
+            
             return {
-                'response_text': "To modify the query, please go back to adjust your criteria, then I'll regenerate the SQL.",
-                'stage': self.state.current_stage,
-                'metadata': {},
-                'next_prompt': "Please specify what you'd like to change about the criteria."
+                'response_text': "I've updated the criteria based on your feedback:",
+                'ui_components': {
+                    'type': 'criteria_chips',
+                    'data': self.state.criteria
+                },
+                'stage': 0,
+                'metadata': {
+                    'stage': 0,
+                    'criteria': self.state.criteria,
+                    'status': 'Criteria updated',
+                    'actions': ['approve', 'edit', 'add_criterion']
+                },
+                'next_prompt': "Do these look better? Say 'yes' to proceed or make more changes."
             }
         
         else:
@@ -854,6 +1171,76 @@ Keep the response conversational and helpful."""
             'stage': self.state.current_stage,
             'metadata': {}
         }
+    
+    def _handle_field_mapping_update(self, field_mappings: List[Dict[str, Any]]) -> Dict[str, Any]:
+        """
+        Handle updated field mappings from the UI.
+        
+        Args:
+            field_mappings: List of updated field mappings with selected fields
+            
+        Returns:
+            Response dict with updated criteria and next stage UI
+        """
+        logger.info(f"Processing field mapping update with {len(field_mappings)} mappings")
+        
+        # Update criteria with the new field mappings
+        for mapping in field_mappings:
+            entity = mapping.get('entity')
+            selected_field = mapping.get('selected')
+            
+            # Find the criterion that matches this entity
+            for criterion in self.state.criteria:
+                if criterion.get('text', '').lower() == entity.lower() or \
+                   any(e.get('text', '').lower() == entity.lower() for e in criterion.get('entities', [])):
+                    # Update the schema mapping for this criterion
+                    if 'schema_mapping' not in criterion:
+                        criterion['schema_mapping'] = {}
+                    
+                    criterion['schema_mapping']['selected_field'] = selected_field
+                    logger.info(f"Updated field mapping for '{entity}' to '{selected_field}'")
+        
+        # Generate UI components with updated field mappings
+        # Do concept mapping and generate UI components for value selection
+        try:
+            from .ui_component_generator import generate_ui_components
+            
+            # Map concepts for the updated criteria
+            criteria = self.agent._map_to_concepts(self.state.criteria)
+            
+            # Generate UI components
+            criteria = generate_ui_components(criteria, self.agent.schema, self.agent.concept_df)
+            
+            # Update state
+            self.state.criteria = criteria
+            self.state.concepts_mapped = True
+            self.state.current_stage = 2
+            
+            return {
+                'response_text': 'Field mappings updated! Now please specify values for each criterion.',
+                'ui_components': {
+                    'type': 'criteria_form',
+                    'data': criteria
+                },
+                'stage': 2,
+                'metadata': {
+                    'criteria': criteria,
+                    'stage': 2,
+                    'status': 'Field mappings updated - ready for value selection'
+                }
+            }
+        except Exception as e:
+            logger.error(f"Error processing updated field mappings: {e}", exc_info=True)
+            return {
+                'response_text': f'Field mappings updated, but encountered an error: {str(e)}',
+                'ui_components': [],
+                'stage': 1,
+                'metadata': {
+                    'criteria': self.state.criteria,
+                    'stage': 1,
+                    'error': str(e)
+                }
+            }
     
     def cleanup(self):
         """Cleanup resources"""

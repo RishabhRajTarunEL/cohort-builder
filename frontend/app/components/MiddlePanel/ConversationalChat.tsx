@@ -4,6 +4,7 @@ import React, { useState, useRef, useEffect } from 'react';
 import { ArrowRight, User, Bot, Loader2, AlertCircle, CheckCircle, XCircle, Clock } from 'lucide-react';
 import { CriteriaChips, SQLPreview, QueryResults } from '@/app/components/criteria';
 import DynamicCriterionComponent from '@/app/components/criteria/DynamicCriterionComponent';
+import { Button } from '@/app/components/ui';
 
 const API_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000/api';
 
@@ -61,6 +62,7 @@ export default function ConversationalChat({ projectId }: ConversationalChatProp
   const [loading, setLoading] = useState(false);
   const [loadingProject, setLoadingProject] = useState(true);
   const [criteriaValues, setCriteriaValues] = useState<{ [key: string]: any }>({});
+  const [fieldMappingChanges, setFieldMappingChanges] = useState<{ [key: string]: string }>({});
   
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
@@ -262,6 +264,109 @@ export default function ConversationalChat({ projectId }: ConversationalChatProp
     }
   };
 
+  const applyFieldMappings = async (originalMappings: any[]) => {
+    if (!project || Object.keys(fieldMappingChanges).length === 0) return;
+
+    setLoading(true);
+
+    // Build updated mappings array
+    const updatedMappings = originalMappings.map((mapping, idx) => {
+      const changeKey = `mapping_${idx}`;
+      if (fieldMappingChanges[changeKey]) {
+        return {
+          ...mapping,
+          selected: fieldMappingChanges[changeKey]
+        };
+      }
+      return mapping;
+    });
+
+    // Create a simple user message
+    const changeMessage = 'apply field mappings';
+
+    // Add user message to UI
+    const tempUserMsg: ChatMessage = {
+      id: `temp-user-${Date.now()}`,
+      role: 'user',
+      content: changeMessage,
+      timestamp: new Date().toISOString(),
+      status: 'success'
+    };
+    setMessages(prev => [...prev, tempUserMsg]);
+
+    // Add loading message
+    const loadingMsgId = `loading-${Date.now()}`;
+    const loadingMsg: ChatMessage = {
+      id: loadingMsgId,
+      role: 'assistant',
+      content: 'Updating field mappings...',
+      timestamp: new Date().toISOString(),
+      status: 'loading'
+    };
+    setMessages(prev => [...prev, loadingMsg]);
+
+    try {
+      const csrfToken = getCookie('csrftoken');
+      const headers: Record<string, string> = {
+        'Content-Type': 'application/json',
+      };
+      if (csrfToken) {
+        headers['X-CSRFToken'] = csrfToken;
+      }
+
+      const response = await fetch(`${API_URL}/chat/conversational`, {
+        method: 'POST',
+        headers,
+        credentials: 'include',
+        body: JSON.stringify({
+          project_id: project.id,
+          message: 'apply field mappings',
+          field_mappings: updatedMappings,
+        }),
+      });
+
+      if (!response.ok) {
+        const errorText = await response.text();
+        throw new Error(`HTTP error! status: ${response.status} - ${errorText}`);
+      }
+
+      const data = await response.json();
+
+      // Replace loading message with actual response
+      setMessages(prev =>
+        prev.filter(m => m.id !== loadingMsgId).concat({
+          id: data.assistant_message_id?.toString() || `assistant-${Date.now()}`,
+          role: 'assistant',
+          content: data.response_text || data.response || 'Field mappings updated',
+          ui_components: data.ui_components,
+          timestamp: data.timestamp || new Date().toISOString(),
+          next_prompt: data.next_prompt,
+          status: 'success',
+          metadata: data.metadata
+        })
+      );
+
+      // Clear the changes state
+      setFieldMappingChanges({});
+
+    } catch (error) {
+      console.error('Error applying field mappings:', error);
+      
+      setMessages(prev =>
+        prev.filter(m => m.id !== loadingMsgId).concat({
+          id: `error-${Date.now()}`,
+          role: 'system',
+          content: 'Failed to apply field mappings. Please try again.',
+          timestamp: new Date().toISOString(),
+          status: 'error',
+          error_message: error instanceof Error ? error.message : 'Unknown error'
+        })
+      );
+    } finally {
+      setLoading(false);
+    }
+  };
+
   const handleValueChange = (criterionId: string, entity: string, operator: string, value: any) => {
     const key = `${criterionId}_${entity}`;
     setCriteriaValues(prev => ({
@@ -329,6 +434,9 @@ export default function ConversationalChat({ projectId }: ConversationalChatProp
         );
 
       case 'schema_mapping':
+        const mappingData = component.data || [];
+        const hasChanges = Object.keys(fieldMappingChanges).length > 0;
+        
         return (
           <div className="my-3 space-y-4">
             <div className="p-4 bg-blue-50 border border-blue-200 rounded-lg">
@@ -336,41 +444,68 @@ export default function ConversationalChat({ projectId }: ConversationalChatProp
               <p className="text-sm text-blue-700 mb-4">
                 Review the database fields selected for each criterion. You can change them using the dropdowns below.
               </p>
-              {(component.data || []).map((mapping: any, idx: number) => (
-                <div key={idx} className="mb-4 p-3 bg-white rounded border border-blue-200">
-                  <div className="mb-2">
-                    <span className="text-xs font-medium text-gray-500 uppercase">Criterion:</span>
-                    <p className="text-sm text-gray-900">{mapping.criterion_text}</p>
-                  </div>
-                  <div className="mb-2">
-                    <span className="text-xs font-medium text-gray-500 uppercase">Entity:</span>
-                    <span className="ml-2 px-2 py-1 bg-blue-100 text-blue-800 rounded text-sm font-medium">
-                      {mapping.entity}
-                    </span>
-                  </div>
-                  <div className="mb-2">
-                    <label className="block text-sm font-medium text-gray-700 mb-1">
-                      Select Database Field:
-                    </label>
-                    <select 
-                      className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-                      defaultValue={mapping.selected}
-                      disabled={loading}
-                    >
-                      {(mapping.options || []).map((option: string) => (
-                        <option key={option} value={option}>
-                          {option}
-                        </option>
-                      ))}
-                    </select>
-                  </div>
-                  {mapping.field_description && (
-                    <div className="mt-2 p-2 bg-gray-50 rounded text-xs text-gray-600">
-                      {mapping.field_description}
+              {mappingData.map((mapping: any, idx: number) => {
+                const changeKey = `mapping_${idx}`;
+                const currentValue = fieldMappingChanges[changeKey] || mapping.selected;
+                const isChanged = fieldMappingChanges[changeKey] && fieldMappingChanges[changeKey] !== mapping.selected;
+                
+                return (
+                  <div key={idx} className={`mb-4 p-3 bg-white rounded border ${isChanged ? 'border-green-400 shadow-sm' : 'border-blue-200'}`}>
+                    <div className="mb-2">
+                      <span className="text-xs font-medium text-gray-500 uppercase">Entity:</span>
+                      <span className="ml-2 px-2 py-1 bg-blue-100 text-blue-800 rounded text-sm font-medium">
+                        {mapping.entity}
+                      </span>
+                      {isChanged && (
+                        <span className="ml-2 px-2 py-1 bg-green-100 text-green-700 rounded text-xs font-medium">
+                          Modified
+                        </span>
+                      )}
                     </div>
-                  )}
+                    <div className="mb-2">
+                      <label className="block text-sm font-medium text-gray-700 mb-1">
+                        Select Database Field:
+                      </label>
+                      <select 
+                        className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                        value={currentValue}
+                        onChange={(e) => {
+                          setFieldMappingChanges(prev => ({
+                            ...prev,
+                            [changeKey]: e.target.value
+                          }));
+                        }}
+                        disabled={loading}
+                      >
+                        {(mapping.options || []).map((option: string) => (
+                          <option key={option} value={option}>
+                            {option}
+                          </option>
+                        ))}
+                      </select>
+                    </div>
+                  </div>
+                );
+              })}
+              
+              {hasChanges && (
+                <div className="mt-4 flex gap-2">
+                  <Button
+                    variant="primary"
+                    onClick={() => applyFieldMappings(mappingData)}
+                    disabled={loading}
+                  >
+                    Apply Changes
+                  </Button>
+                  <Button
+                    variant="secondary"
+                    onClick={() => setFieldMappingChanges({})}
+                    disabled={loading}
+                  >
+                    Reset
+                  </Button>
                 </div>
-              ))}
+              )}
             </div>
           </div>
         );
@@ -575,13 +710,6 @@ export default function ConversationalChat({ projectId }: ConversationalChatProp
                 {message.ui_components && message.status === 'success' && (
                   <div className="w-full mt-2">
                     {renderUIComponent(message.ui_components)}
-                  </div>
-                )}
-
-                {/* Next Prompt Hint */}
-                {message.next_prompt && message.status === 'success' && (
-                  <div className="mt-2 px-3 py-2 bg-blue-50 border border-blue-200 rounded text-xs text-blue-700 italic">
-                    💡 {message.next_prompt}
                   </div>
                 )}
 
