@@ -384,8 +384,8 @@ export default function ConversationalChat({ projectId }: ConversationalChatProp
     switch (component.type) {
       case 'criteria_chips':
         return (
-          <div className="my-3 p-4 bg-blue-50 border border-blue-200 rounded-lg">
-            <h4 className="text-sm font-semibold text-blue-900 mb-2">Extracted Criteria</h4>
+          <div className="my-3 p-4 bg-purple-50 border border-purple-200 rounded-lg">
+            <h4 className="text-sm font-semibold text-purple-900 mb-2">Extracted Criteria</h4>
             <CriteriaChips criteria={component.data || []} editable={false} />
           </div>
         );
@@ -440,9 +440,9 @@ export default function ConversationalChat({ projectId }: ConversationalChatProp
         
         return (
           <div className="my-3 space-y-4">
-            <div className="p-4 bg-blue-50 border border-blue-200 rounded-lg">
-              <h4 className="font-semibold text-blue-900 mb-3">Field Mappings</h4>
-              <p className="text-sm text-blue-700 mb-4">
+            <div className="p-4 bg-purple-50 border border-purple-200 rounded-lg">
+              <h4 className="font-semibold text-purple-900 mb-3">Field Mappings</h4>
+              <p className="text-sm text-purple-700 mb-4">
                 Review the database fields selected for each criterion. You can change them using the dropdowns below.
               </p>
               {mappingData.map((mapping: any, idx: number) => {
@@ -472,7 +472,7 @@ export default function ConversationalChat({ projectId }: ConversationalChatProp
                         Select Database Field:
                       </label>
                       <select 
-                        className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                        className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-purple-500 focus:border-transparent text-sm"
                         value={currentValue}
                         onChange={(e) => {
                           setFieldMappingChanges(prev => ({
@@ -577,7 +577,7 @@ export default function ConversationalChat({ projectId }: ConversationalChatProp
           <div className="mb-3 space-y-2">
             {message.metadata.tool_calls.map((tool, idx) => (
               <div key={idx} className="flex items-center gap-2 p-2 bg-gray-50 border border-gray-200 rounded text-xs">
-                {tool.status === 'running' && <Loader2 className="w-3 h-3 animate-spin text-blue-600" />}
+                {tool.status === 'running' && <Loader2 className="w-3 h-3 animate-spin text-purple-600" />}
                 {tool.status === 'completed' && <CheckCircle className="w-3 h-3 text-green-600" />}
                 {tool.status === 'failed' && <XCircle className="w-3 h-3 text-red-600" />}
                 <span className="font-medium text-gray-700">{tool.tool}</span>
@@ -605,7 +605,7 @@ export default function ConversationalChat({ projectId }: ConversationalChatProp
   if (loadingProject) {
     return (
       <div className="flex flex-col h-full bg-white items-center justify-center">
-        <Loader2 className="w-8 h-8 animate-spin text-blue-600 mb-2" />
+        <Loader2 className="w-8 h-8 animate-spin text-purple-600 mb-2" />
         <p className="text-sm text-gray-600">Loading project...</p>
       </div>
     );
@@ -648,7 +648,7 @@ export default function ConversationalChat({ projectId }: ConversationalChatProp
         {messages.length === 0 && !loading && (
           <div className="flex items-center justify-center h-full text-gray-500">
             <div className="text-center max-w-md">
-              <Bot className="w-12 h-12 mx-auto mb-4 text-[#06B6D4]" />
+              <Bot className="w-12 h-12 mx-auto mb-4 text-purple-500" />
               <p className="text-lg mb-2 text-gray-700 font-semibold">
                 Welcome to Cohort Builder
               </p>
@@ -663,7 +663,7 @@ export default function ConversationalChat({ projectId }: ConversationalChatProp
                     <button
                       key={prompt}
                       onClick={() => setInput(prompt)}
-                      className="px-4 py-2 text-sm bg-white border border-gray-300 rounded-lg hover:bg-gray-50 hover:border-[#06B6D4] transition-colors"
+                      className="px-4 py-2 text-sm bg-white border border-gray-300 rounded-lg hover:bg-purple-50 hover:border-purple-500 transition-colors"
                     >
                       {prompt}
                     </button>
@@ -683,10 +683,10 @@ export default function ConversationalChat({ projectId }: ConversationalChatProp
               {/* Avatar */}
               <div className={`flex-shrink-0 w-8 h-8 rounded-full flex items-center justify-center ${
                 message.role === 'user' 
-                  ? 'bg-blue-500 text-white' 
+                  ? 'bg-purple-100 border-purple-300' 
                   : message.role === 'system'
                     ? 'bg-red-500 text-white'
-                    : 'bg-[#06B6D4] text-white'
+                    : 'bg-white border-purple-400'
               }`}>
                 {message.role === 'user' ? (
                   <User className="w-4 h-4" />
@@ -699,14 +699,14 @@ export default function ConversationalChat({ projectId }: ConversationalChatProp
 
               {/* Message Content */}
               <div className={`flex flex-col ${message.role === 'user' ? 'items-end' : 'items-start'} flex-1 min-w-0`}>
-                <div className={`rounded-lg px-4 py-3 w-full ${
+                <div className={`rounded-2xl px-5 py-3 w-full ${
                   message.role === 'user'
-                    ? 'bg-blue-500 text-white'
+                    ? 'bg-[#F5F0FB] border border-[#E8DDFF] text-gray-800'
                     : message.role === 'system'
                       ? 'bg-red-50 border border-red-200 text-red-800'
                       : message.status === 'loading'
-                        ? 'bg-gray-50 border border-gray-200'
-                        : 'bg-gray-100 text-gray-800'
+                        ? 'bg-white border border-gray-200 text-gray-600'
+                        : 'bg-white text-gray-800'
                 }`}>
                   {renderMessageContent(message)}
                 </div>
@@ -731,8 +731,8 @@ export default function ConversationalChat({ projectId }: ConversationalChatProp
       </div>
 
       {/* Input Bar */}
-      <div className="px-4 py-4 border-t border-gray-200 bg-gray-50">
-        <div className="flex gap-2 items-end">
+      <div className="px-4 py-4 border-t border-gray-200 bg-white">
+        <div className="flex gap-2 items-end bg-white border border-[#E8DDFF] rounded-xl px-3 py-2">
           <textarea
             ref={textareaRef}
             value={input}
@@ -740,18 +740,18 @@ export default function ConversationalChat({ projectId }: ConversationalChatProp
             onKeyDown={handleKeyPress}
             placeholder={
               project 
-                ? "Type your message... (e.g., 'yes', 'generate SQL', or describe new criteria)"
+                ? "Talk to Polly Co-Scientist..."
                 : "Please select a project from the Cohorts page first"
             }
             disabled={loading || !project}
-            className="flex-1 px-4 py-3 border border-gray-300 rounded-lg resize-none overflow-hidden focus:outline-none focus:ring-2 focus:ring-[#06B6D4] focus:border-transparent disabled:bg-gray-100 disabled:cursor-not-allowed"
-            style={{ minHeight: '48px', maxHeight: '200px' }}
+            className="flex-1 px-2 py-2 border-0 resize-none overflow-hidden focus:outline-none focus:ring-0 focus:border-0 disabled:bg-gray-100 disabled:cursor-not-allowed text-gray-700 placeholder:text-gray-400"
+            style={{ minHeight: '40px', maxHeight: '200px' }}
             rows={1}
           />
           <button
             onClick={sendMessage}
             disabled={!input.trim() || loading || !project}
-            className="flex-shrink-0 p-3 bg-[#06B6D4] text-white rounded-full hover:bg-[#111827] transition-colors disabled:bg-gray-300 disabled:cursor-not-allowed"
+            className="flex-shrink-0 p-3 bg-[#6B2FCC] text-white rounded-full hover:bg-[#5E22A6] active:bg-[#4D1A8C] transition-colors disabled:bg-gray-300 disabled:cursor-not-allowed"
           >
             {loading ? (
               <Loader2 className="w-5 h-5 animate-spin" />

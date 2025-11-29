@@ -295,7 +295,7 @@ export default function FilterDropdownPanel({ projectId }: FilterDropdownPanelPr
                   checked={selected.has(value.toString())}
                   onChange={() => toggleValueSelection(key, value.toString())}
                   className="cursor-pointer"
-                  style={{ accentColor: '#06B6D4' }}
+                  style={{ accentColor: '#8E42EE' }}
                 />
                 <span className="text-sm" style={{ color: '#111827' }}>
                   {value.toString()}
@@ -309,9 +309,9 @@ export default function FilterDropdownPanel({ projectId }: FilterDropdownPanelPr
             <button
               onClick={() => toggleShowMore(key)}
               className="text-xs px-2 py-1 rounded transition-colors w-full"
-              style={{ color: '#06B6D4', backgroundColor: '#06B6D410' }}
-              onMouseEnter={e => (e.currentTarget.style.backgroundColor = '#06B6D420')}
-              onMouseLeave={e => (e.currentTarget.style.backgroundColor = '#06B6D410')}
+              style={{ color: '#8E42EE', backgroundColor: '#8E42EE10' }}
+              onMouseEnter={e => (e.currentTarget.style.backgroundColor = '#8E42EE20')}
+              onMouseLeave={e => (e.currentTarget.style.backgroundColor = '#8E42EE10')}
             >
               {showMore ? 'Show less' : `Show more (${filteredValues.length - displayLimit} more)`}
             </button>
@@ -328,9 +328,9 @@ export default function FilterDropdownPanel({ projectId }: FilterDropdownPanelPr
             <button
               onClick={() => applyFieldFilter(filterField)}
               className="w-full px-3 py-2 rounded font-medium text-sm transition-colors"
-              style={{ backgroundColor: '#06B6D4', color: 'white' }}
-              onMouseEnter={e => (e.currentTarget.style.backgroundColor = '#5a9090')}
-              onMouseLeave={e => (e.currentTarget.style.backgroundColor = '#06B6D4')}
+              style={{ backgroundColor: '#8E42EE', color: 'white' }}
+              onMouseEnter={e => (e.currentTarget.style.backgroundColor = '#6A42EE')}
+              onMouseLeave={e => (e.currentTarget.style.backgroundColor = '#8E42EE')}
             >
               Apply ({selected.size} selected)
             </button>
@@ -389,9 +389,9 @@ export default function FilterDropdownPanel({ projectId }: FilterDropdownPanelPr
             <button
               onClick={() => applyFieldFilter(filterField)}
               className="w-full px-3 py-2 rounded font-medium text-sm transition-colors"
-              style={{ backgroundColor: '#06B6D4', color: 'white' }}
-              onMouseEnter={e => (e.currentTarget.style.backgroundColor = '#5a9090')}
-              onMouseLeave={e => (e.currentTarget.style.backgroundColor = '#06B6D4')}
+              style={{ backgroundColor: '#8E42EE', color: 'white' }}
+              onMouseEnter={e => (e.currentTarget.style.backgroundColor = '#6A42EE')}
+              onMouseLeave={e => (e.currentTarget.style.backgroundColor = '#8E42EE')}
             >
               Apply Filter
             </button>
@@ -452,9 +452,9 @@ export default function FilterDropdownPanel({ projectId }: FilterDropdownPanelPr
             <button
               onClick={() => applyFieldFilter(filterField)}
               className="w-full px-3 py-2 rounded font-medium text-sm transition-colors"
-              style={{ backgroundColor: '#06B6D4', color: 'white' }}
-              onMouseEnter={e => (e.currentTarget.style.backgroundColor = '#5a9090')}
-              onMouseLeave={e => (e.currentTarget.style.backgroundColor = '#06B6D4')}
+              style={{ backgroundColor: '#8E42EE', color: 'white' }}
+              onMouseEnter={e => (e.currentTarget.style.backgroundColor = '#6A42EE')}
+              onMouseLeave={e => (e.currentTarget.style.backgroundColor = '#8E42EE')}
             >
               Apply Filter
             </button>
@@ -471,7 +471,7 @@ export default function FilterDropdownPanel({ projectId }: FilterDropdownPanelPr
       {/* Header */}
       <div className="sticky top-0 bg-white border-b p-4 z-10" style={{ borderColor: '#6B7280' }}>
         <div className="flex items-center gap-2">
-          <FilterIcon className="w-5 h-5" style={{ color: '#06B6D4' }} />
+          <FilterIcon className="w-5 h-5" style={{ color: '#8E42EE' }} />
           <h3 className="font-semibold" style={{ color: '#111827' }}>
             Add Filters
           </h3>

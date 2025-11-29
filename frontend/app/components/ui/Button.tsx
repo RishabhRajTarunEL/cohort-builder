@@ -29,7 +29,7 @@ const Button = React.forwardRef<HTMLButtonElement, ButtonProps>(
       ...restProps
     } = props;
     // Base styles - Polly uses rounded corners (5px) and bold font
-    const baseStyles = 'align-center inline-flex items-center justify-center font-bold rounded-[5px] transition-all duration-300 focus:outline-none focus:ring-2 focus:ring-offset-2 disabled:cursor-not-allowed';
+    const baseStyles = 'inline-flex items-center justify-center font-bold rounded-[5px] transition-all duration-300 focus:outline-none focus:ring-2 focus:ring-offset-2 disabled:cursor-not-allowed';
 
     // Variant styles - Polly Design System
     const variantStyles: Record<ButtonVariant, string> = {

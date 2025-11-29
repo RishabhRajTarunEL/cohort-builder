@@ -28,12 +28,12 @@ export default function DemographicsChart({ title, data, loading }: Demographics
 
   if (loading) {
     return (
-      <div className="bg-surface border border-border rounded-lg p-4">
-        <h3 className="text-sm font-semibold mb-3 text-text">
+      <div className="bg-[#F5F0FB] border border-[#E8DDFF] rounded-2xl p-4">
+        <h3 className="text-sm font-semibold mb-3 text-purple-700">
           {title}
         </h3>
         <div className="flex items-center justify-center h-48">
-          <Loader2 className="w-8 h-8 animate-spin text-primary" />
+          <Loader2 className="w-8 h-8 animate-spin text-purple-500" />
         </div>
       </div>
     );
@@ -41,11 +41,11 @@ export default function DemographicsChart({ title, data, loading }: Demographics
 
   if (chartData.length === 0) {
     return (
-      <div className="bg-surface border border-border rounded-lg p-4">
-        <h3 className="text-sm font-semibold mb-3 text-text">
+      <div className="bg-[#F5F0FB] border border-[#E8DDFF] rounded-2xl p-4">
+        <h3 className="text-sm font-semibold mb-3 text-purple-700">
           {title}
         </h3>
-        <div className="flex items-center justify-center h-48 text-sm text-text-tertiary">
+        <div className="flex items-center justify-center h-48 text-sm text-gray-500">
           No data available
         </div>
       </div>
@@ -53,8 +53,8 @@ export default function DemographicsChart({ title, data, loading }: Demographics
   }
 
   return (
-    <div className="bg-surface border border-border rounded-lg p-4">
-      <h3 className="text-sm font-semibold mb-3 text-text">
+    <div className="bg-[#F5F0FB] border border-[#E8DDFF] rounded-2xl p-4">
+      <h3 className="text-sm font-semibold mb-3 text-purple-700">
         {title}
       </h3>
       <ResponsiveContainer width="100%" height={200}>
@@ -88,9 +88,9 @@ export default function DemographicsChart({ title, data, loading }: Demographics
                 className="w-3 h-3 rounded-full"
                 style={{ backgroundColor: COLORS[index % COLORS.length] }}
               />
-              <span className="text-text">{item.name}</span>
+              <span className="text-gray-800">{item.name}</span>
             </div>
-            <span className="font-semibold text-text">
+            <span className="font-semibold text-gray-800">
               {item.value.toLocaleString()}
             </span>
           </div>

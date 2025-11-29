@@ -215,10 +215,10 @@ export default function DashboardPage() {
       <div className="max-w-7xl mx-auto px-6 py-10">
         {/* Welcome Header */}
         <div className="mb-10">
-          <h1 className="text-4xl font-bold mb-2 text-primary">
+          <h1 className="text-4xl font-bold mb-2 text-purple-500">
             Welcome back, {user?.first_name || user?.username}!
           </h1>
-          <p className="text-lg text-text-light">
+          <p className="text-lg text-gray-500">
             Manage your atlases, track cohorts, and get quick insights into your data.
           </p>
         </div>
@@ -232,10 +232,10 @@ export default function DashboardPage() {
             >
               <div className="flex items-start justify-between">
                 <div className="flex-1">
-                  <p className="text-sm font-medium mb-3 text-text-light">
+                  <p className="text-sm font-medium mb-3 text-gray-500">
                     {stat.name}
                   </p>
-                  <p className="text-4xl font-bold text-text">
+                  <p className="text-4xl font-bold text-gray-900">
                     {stat.value}
                   </p>
                 </div>
@@ -250,21 +250,18 @@ export default function DashboardPage() {
         {/* Atlases Section */}
         <div className="mb-6 flex items-center justify-between">
           <div>
-            <h2 className="text-2xl font-bold text-primary">
+            <h2 className="text-2xl font-bold text-purple-500">
               Your Polly Atlases
             </h2>
-            <p className="text-sm mt-1 text-text-light">
-              {isLoading ? 'Loading...' : `${atlases.length} ${atlases.length === 1 ? 'atlas' : 'atlases'} available`}
-            </p>
+
           </div>
           <Button
             onClick={fetchAtlases}
             disabled={isLoading}
             variant="accent"
             loading={isLoading}
-            className="shadow-lg"
+            className="shadow-lg flex justify-center"
           >
-            <Activity size={20} strokeWidth={2.5} className="mr-2" />
             Refresh
           </Button>
         </div>
@@ -284,11 +281,11 @@ export default function DashboardPage() {
         {/* Loading State */}
         {isLoading && !error && (
           <div className="card p-16 text-center">
-            <Activity size={48} className="mx-auto mb-4 animate-spin text-primary" />
-            <h3 className="text-xl font-bold mb-2 text-primary">
+            <i className="polly-icon loading-icon text-5xl mx-auto mb-4 animate-spin text-purple-500" />
+            <h3 className="text-xl font-bold mb-2 text-purple-500">
               Loading Atlases...
             </h3>
-            <p className="text-base text-text-light">
+            <p className="text-base text-gray-500">
               Fetching your atlases from Polly
             </p>
           </div>
@@ -303,65 +300,65 @@ export default function DashboardPage() {
                 className="card hover:shadow-lg transition-all duration-300 group"
               >
                 <div className="flex items-start justify-between mb-5">
-                  <div className="w-14 h-14 rounded-lg bg-primary-light flex items-center justify-center transition-transform group-hover:scale-110">
-                    <Database size={28} className="text-primary" strokeWidth={2} />
+                  <div className="w-14 h-14 rounded-lg bg-purple-100 flex items-center justify-center transition-transform group-hover:scale-110">
+                    <Database size={28} className="text-purple-500" strokeWidth={2} />
                   </div>
-                  <span className="px-3 py-1.5 rounded-full text-xs font-semibold bg-success text-white">
+                  <span className="px-3 py-1.5 rounded-full text-xs font-semibold bg-green-500 text-white">
                     Available
                   </span>
                 </div>
 
-                <h3 className="text-xl font-bold mb-2 text-primary">
+                <h3 className="text-xl font-bold mb-2 text-purple-500">
                   {atlas.atlas_name}
                 </h3>
                 
                 {atlas.description && (
-                  <p className="text-sm mb-4 line-clamp-2 text-text-light">
+                  <p className="text-sm mb-4 line-clamp-2 text-gray-500">
                     {atlas.description}
                   </p>
                 )}
 
-                <div className="space-y-3 mb-5 pb-5 border-b border-border">
+                <div className="space-y-3 mb-5 pb-5 border-b border-gray-200">
                   {atlas.num_tables !== undefined && (
                     <div className="flex items-center justify-between">
-                      <span className="text-sm font-medium flex items-center gap-1.5 text-text-light">
+                      <span className="text-sm font-medium flex items-center gap-1.5 text-gray-500">
                         <FileText size={14} />
                         Tables
                       </span>
-                      <span className="text-sm font-semibold text-text">
+                      <span className="text-sm font-semibold text-gray-900">
                         {atlas.num_tables}
                       </span>
                     </div>
                   )}
                   {atlas.size !== undefined && (
                     <div className="flex items-center justify-between">
-                      <span className="text-sm font-medium flex items-center gap-1.5 text-text-light">
+                      <span className="text-sm font-medium flex items-center gap-1.5 text-gray-500">
                         <HardDrive size={14} />
                         Size
                       </span>
-                      <span className="text-sm font-semibold text-text">
+                      <span className="text-sm font-semibold text-gray-900">
                         {(atlas.size / (1024 * 1024)).toFixed(2)} MB
                       </span>
                     </div>
                   )}
                   {atlas.created_by && (
                     <div className="flex items-center justify-between">
-                      <span className="text-sm font-medium flex items-center gap-1.5 text-text-light">
+                      <span className="text-sm font-medium flex items-center gap-1.5 text-gray-500">
                         <User size={14} />
                         Created By
                       </span>
-                      <span className="text-sm text-text">
+                      <span className="text-sm text-gray-900">
                         {atlas.created_by.first_name} {atlas.created_by.last_name}
                       </span>
                     </div>
                   )}
                   {atlas.created_at && (
                     <div className="flex items-center justify-between">
-                      <span className="text-sm font-medium flex items-center gap-1.5 text-text-light">
+                      <span className="text-sm font-medium flex items-center gap-1.5 text-gray-500">
                         <Clock size={14} />
                         Created
                       </span>
-                      <span className="text-sm text-text">
+                      <span className="text-sm text-gray-900">
                         {new Date(atlas.created_at).toLocaleDateString('en-US', {
                           month: 'short',
                           day: 'numeric',
@@ -387,23 +384,23 @@ export default function DashboardPage() {
                   >
                     {processingTasks[atlas.atlas_id] ? (
                       processingTasks[atlas.atlas_id].status === 'Failed' ? (
-                        <>
+                        <div className='flex items-center'>
                           <AlertCircle size={16} strokeWidth={2.5} className="mr-2" />
                           Retry Processing
-                        </>
+                        </div>
                       ) : (
                         `${processingTasks[atlas.atlas_id].status} (${processingTasks[atlas.atlas_id].progress}%)`
                       )
                     ) : !atlas.num_tables || atlas.num_tables === 0 ? (
-                      <>
+                      <div className='flex items-center'>
                         <AlertCircle size={16} strokeWidth={2.5} className="mr-2" />
                         No Tables Available
-                      </>
+                      </div>
                     ) : (
-                      <>
+                      <div className='flex items-center'>
                         <Download size={16} strokeWidth={2.5} className="mr-2" />
                         Process DB
-                      </>
+                      </div>
                     )}
                   </Button>
 
@@ -418,8 +415,10 @@ export default function DashboardPage() {
                     variant="primary"
                     className="w-full"
                   >
-                    Start Cohort
-                    <ArrowRight size={16} strokeWidth={2.5} className="ml-2" />
+                    <div className='flex items-center'>
+                      Start Cohort
+                      <ArrowRight size={16} strokeWidth={2.5} className="ml-2" />
+                    </div>
                   </Button>
                   <Button
                     onClick={() => router.push('/cohorts')}
@@ -437,13 +436,13 @@ export default function DashboardPage() {
         {/* Empty State */}
         {!isLoading && !error && atlases.length === 0 && (
           <div className="card p-16 text-center">
-            <div className="w-20 h-20 rounded-full mx-auto mb-6 flex items-center justify-center bg-primary-light">
-              <Database size={40} className="text-primary" strokeWidth={2} />
+            <div className="w-20 h-20 rounded-full mx-auto mb-6 flex items-center justify-center bg-purple-100">
+              <Database size={40} className="text-purple-500" strokeWidth={2} />
             </div>
-            <h3 className="text-xl font-bold mb-3 text-primary">
+            <h3 className="text-xl font-bold mb-3 text-purple-500">
               No atlases found
             </h3>
-            <p className="text-base mb-8 max-w-md mx-auto text-text-light">
+            <p className="text-base mb-8 max-w-md mx-auto text-gray-500">
               You don't have any atlases available. Make sure your Polly API key is configured correctly in your profile.
             </p>
             <Button

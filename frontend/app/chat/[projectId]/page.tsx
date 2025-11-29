@@ -17,9 +17,9 @@ export default function ChatPage({ params }: ChatPageProps) {
   return (
     <div className="flex h-[calc(100vh-4rem)] w-screen overflow-hidden bg-white">
       {/* Left Panel - 20% (Split into two sections) */}
-      <div className="w-[20%] border-r border-border bg-white flex flex-col">
+      <div className="w-[20%] border-r border-gray-200 bg-white flex flex-col">
         {/* Database Schema - Top 50% */}
-        <div className="h-[50%] overflow-y-auto border-b border-border">
+        <div className="h-[50%] overflow-y-auto border-b border-gray-200">
           <DatabaseExplorer projectId={projectId} />
         </div>
         {/* Filter Dropdowns - Bottom 50% */}
@@ -34,7 +34,7 @@ export default function ChatPage({ params }: ChatPageProps) {
       </div>
 
       {/* Right Panel - 20% */}
-      <div className="w-[20%] border-l border-border bg-white overflow-y-auto">
+      <div className="w-[20%] border-l border-gray-200 bg-white overflow-y-auto">
         <RightPanel projectId={projectId} />
       </div>
     </div>

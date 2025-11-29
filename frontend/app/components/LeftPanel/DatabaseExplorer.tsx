@@ -147,7 +147,7 @@ export default function DatabaseExplorer({ projectId }: DatabaseExplorerProps) {
       {/* Header */}
       <div className="sticky top-0 bg-white border-b p-4 z-10" style={{ borderColor: '#6B7280' }}>
         <div className="flex items-center gap-2">
-          <Database className="w-5 h-5" style={{ color: '#06B6D4' }} />
+          <Database className="w-5 h-5" style={{ color: '#8E42EE' }} />
           <h2 className="text-lg font-semibold" style={{ color: '#111827' }}>
             Database Schema
           </h2>
@@ -186,12 +186,12 @@ export default function DatabaseExplorer({ projectId }: DatabaseExplorerProps) {
                   ) : (
                     <ChevronRight className="w-4 h-4" style={{ color: '#6B7280' }} />
                   )}
-                  <Table className="w-4 h-4" style={{ color: '#F7E217' }} />
+                  <Table className="w-4 h-4" style={{ color: '#8E42EE' }} />
                   <span className="font-medium text-sm" style={{ color: '#111827' }}>
                     {table.name}
                   </span>
                 </div>
-                <Tag variant="teal" style="light" size="sm">
+                <Tag variant="purple" style="light" size="sm">
                   {table.columns.length} columns
                 </Tag>
               </button>
@@ -205,7 +205,7 @@ export default function DatabaseExplorer({ projectId }: DatabaseExplorerProps) {
                         key={column.name}
                         className="flex items-start justify-between text-xs p-2 bg-white rounded border transition-colors cursor-pointer"
                         style={{ borderColor: '#6B728040' }}
-                        onMouseEnter={e => (e.currentTarget.style.borderColor = '#06B6D4')}
+                        onMouseEnter={e => (e.currentTarget.style.borderColor = '#8E42EE')}
                         onMouseLeave={e => (e.currentTarget.style.borderColor = '#6B728040')}
                       >
                         <div className="flex-1">

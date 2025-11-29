@@ -64,7 +64,7 @@ export default function RightPanel({ projectId }: RightPanelProps) {
     <div className="flex flex-col h-full">
       {/* Header */}
       <div className="sticky top-0 bg-white border-b border-gray-200 p-4 z-10">
-        <h2 className="text-lg font-semibold text-gray-800">Cohort Analytics</h2>
+        <h2 className="text-lg font-semibold text-purple-500">Cohort Analytics</h2>
         <p className="text-xs text-gray-500 mt-1">Real-time statistics</p>
       </div>
 
@@ -81,10 +81,7 @@ export default function RightPanel({ projectId }: RightPanelProps) {
             router.push(`/analyze/${cohortId}`);
           }}
           disabled={cohortCount === 0 || loading}
-          className="w-full py-3 px-4 rounded-lg font-semibold text-white transition-all shadow-md hover:shadow-lg disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2"
-          style={{
-            background: cohortCount === 0 ? '#6B7280' : 'linear-gradient(135deg, #06B6D4 0%, #111827 100%)',
-          }}
+          className="w-full py-3 px-4 rounded-lg font-bold text-white transition-all shadow-md hover:shadow-lg disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2 bg-[#6B2FCC] hover:bg-[#5E22A6] active:bg-[#4D1A8C] disabled:bg-gray-300"
         >
           <BarChart3 className="w-5 h-5" />
           Save & Analyze Cohort
