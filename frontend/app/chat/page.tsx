@@ -4,10 +4,12 @@ import DatabaseExplorer from '../components/LeftPanel/DatabaseExplorer';
 import FilterDropdownPanel from '../components/LeftPanel/FilterDropdownPanel';
 import MiddlePanel from '../components/MiddlePanel/MiddlePanel';
 import RightPanel from '../components/RightPanel/RightPanel';
+import { FieldMappingProvider } from '../contexts/FieldMappingContext';
 
 export default function ChatPage() {
   return (
-    <div className="flex h-[calc(100vh-4rem)] w-screen overflow-hidden bg-white">
+    <FieldMappingProvider>
+      <div className="flex h-[calc(100vh-4rem)] w-screen overflow-hidden bg-white">
       {/* Left Panel - 20% (Split into two sections) */}
       <div className="w-[20%] border-r border-border bg-white flex flex-col">
         {/* Database Schema - Top 50% */}
@@ -30,5 +32,6 @@ export default function ChatPage() {
         <RightPanel />
       </div>
     </div>
+    </FieldMappingProvider>
   );
 }

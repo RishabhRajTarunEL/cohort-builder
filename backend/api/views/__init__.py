@@ -27,7 +27,8 @@ from .polly_views import (
     ProcessAtlasView,
     ProcessAtlasStatusView,
     AtlasTaskStatusView,
-    UploadDataDictionaryView
+    UploadDataDictionaryView,
+    UploadSchemaKeysView
 )
 
 from .cohort_views import (
@@ -61,6 +62,7 @@ __all__ = [
     'ProcessAtlasStatusView',
     'AtlasTaskStatusView',
     'UploadDataDictionaryView',
+    'UploadSchemaKeysView',
     # Cohort views
     'CohortViewSet',
     'FilterViewSet',

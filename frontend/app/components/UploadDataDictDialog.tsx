@@ -1,7 +1,7 @@
 'use client';
 
 import { useState } from 'react';
-import { Upload, X, FileText, AlertCircle, CheckCircle } from 'lucide-react';
+import { Upload, X, FileText, AlertCircle, CheckCircle, FileJson2 } from 'lucide-react';
 import { Button, Alert } from '@/app/components/ui';
 
 interface UploadDataDictDialogProps {
@@ -12,6 +12,13 @@ interface UploadDataDictDialogProps {
   atlasName: string;
 }
 
+interface FileUploadState {
+  file: File | null;
+  uploading: boolean;
+  success: boolean;
+  error: string | null;
+}
+
 export default function UploadDataDictDialog({
   isOpen,
   onClose,
@@ -19,25 +26,23 @@ export default function UploadDataDictDialog({
   atlasId,
   atlasName,
 }: UploadDataDictDialogProps) {
-  const [selectedFile, setSelectedFile] = useState<File | null>(null);
-  const [isUploading, setIsUploading] = useState(false);
-  const [uploadSuccess, setUploadSuccess] = useState(false);
-  const [error, setError] = useState<string | null>(null);
+  const [dataDictState, setDataDictState] = useState<FileUploadState>({
+    file: null,
+    uploading: false,
+    success: false,
+    error: null,
+  });
+
+  const [schemaKeysState, setSchemaKeysState] = useState<FileUploadState>({
+    file: null,
+    uploading: false,
+    success: false,
+    error: null,
+  });
+
+  const [isProcessing, setIsProcessing] = useState(false);
 
   if (!isOpen) return null;
-
-  const handleFileSelect = (e: React.ChangeEvent<HTMLInputElement>) => {
-    const file = e.target.files?.[0];
-    if (file) {
-      // Validate it's a CSV file
-      if (!file.name.endsWith('.csv')) {
-        setError('Please select a CSV file');
-        return;
-      }
-      setSelectedFile(file);
-      setError(null);
-    }
-  };
 
   const getCookie = (name: string): string | null => {
     const value = `; ${document.cookie}`;
@@ -48,51 +53,92 @@ export default function UploadDataDictDialog({
     return null;
   };
 
-  const handleUpload = async () => {
-    if (!selectedFile) {
-      setError('Please select a file first');
-      return;
+  const handleDataDictSelect = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (file) {
+      if (!file.name.endsWith('.csv')) {
+        setDataDictState(prev => ({ ...prev, error: 'Please select a CSV file' }));
+        return;
+      }
+      setDataDictState(prev => ({ ...prev, file, error: null }));
+    }
+  };
+
+  const handleSchemaKeysSelect = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (file) {
+      if (!file.name.endsWith('.json')) {
+        setSchemaKeysState(prev => ({ ...prev, error: 'Please select a JSON file' }));
+        return;
+      }
+      setSchemaKeysState(prev => ({ ...prev, file, error: null }));
+    }
+  };
+
+  const uploadFile = async (file: File, endpoint: string): Promise<boolean> => {
+    const formData = new FormData();
+    formData.append('file', file);
+    formData.append('atlas_id', atlasId);
+
+    const csrfToken = getCookie('csrftoken');
+    const headers: HeadersInit = {};
+    if (csrfToken) {
+      headers['X-CSRFToken'] = csrfToken;
     }
 
-    setIsUploading(true);
-    setError(null);
+    const response = await fetch(`${process.env.NEXT_PUBLIC_API_URL}${endpoint}`, {
+      method: 'POST',
+      headers: headers,
+      body: formData,
+      credentials: 'include',
+    });
+
+    if (!response.ok) {
+      const errorData = await response.json();
+      throw new Error(errorData.detail || 'Failed to upload file');
+    }
+
+    return true;
+  };
+
+  const handleUploadAndProcess = async () => {
+    setIsProcessing(true);
 
     try {
-      const formData = new FormData();
-      formData.append('file', selectedFile);
-      formData.append('atlas_id', atlasId);
-
-      // Get CSRF token
-      const csrfToken = getCookie('csrftoken');
-      const headers: HeadersInit = {};
-      if (csrfToken) {
-        headers['X-CSRFToken'] = csrfToken;
+      // Upload data dictionary if selected
+      if (dataDictState.file) {
+        setDataDictState(prev => ({ ...prev, uploading: true, error: null }));
+        try {
+          await uploadFile(dataDictState.file, '/polly/upload-data-dict');
+          setDataDictState(prev => ({ ...prev, uploading: false, success: true }));
+        } catch (err: any) {
+          setDataDictState(prev => ({ ...prev, uploading: false, error: err.message }));
+          setIsProcessing(false);
+          return;
+        }
       }
 
-      const response = await fetch(`${process.env.NEXT_PUBLIC_API_URL}/polly/upload-data-dict`, {
-        method: 'POST',
-        headers: headers,
-        body: formData,
-        credentials: 'include',
-      });
-
-      if (!response.ok) {
-        const errorData = await response.json();
-        throw new Error(errorData.detail || 'Failed to upload file');
+      // Upload schema keys if selected
+      if (schemaKeysState.file) {
+        setSchemaKeysState(prev => ({ ...prev, uploading: true, error: null }));
+        try {
+          await uploadFile(schemaKeysState.file, '/polly/upload-schema-keys');
+          setSchemaKeysState(prev => ({ ...prev, uploading: false, success: true }));
+        } catch (err: any) {
+          setSchemaKeysState(prev => ({ ...prev, uploading: false, error: err.message }));
+          setIsProcessing(false);
+          return;
+        }
       }
 
-      setUploadSuccess(true);
-      
-      // Wait a moment to show success message, then proceed
+      // All uploads successful, proceed with processing
       setTimeout(() => {
         onUploadComplete();
         handleClose();
-      }, 1500);
-    } catch (err: any) {
+      }, 1000);
+    } catch (err) {
       console.error('Upload error:', err);
-      setError(err.message || 'Failed to upload data dictionary');
-    } finally {
-      setIsUploading(false);
+      setIsProcessing(false);
     }
   };
 
@@ -102,24 +148,29 @@ export default function UploadDataDictDialog({
   };
 
   const handleClose = () => {
-    setSelectedFile(null);
-    setError(null);
-    setUploadSuccess(false);
+    setDataDictState({ file: null, uploading: false, success: false, error: null });
+    setSchemaKeysState({ file: null, uploading: false, success: false, error: null });
+    setIsProcessing(false);
     onClose();
   };
 
+  const anyUploading = dataDictState.uploading || schemaKeysState.uploading;
+  const allSuccess = (dataDictState.file ? dataDictState.success : true) && 
+                     (schemaKeysState.file ? schemaKeysState.success : true) &&
+                     (dataDictState.file || schemaKeysState.file);
+
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/50 backdrop-blur-sm">
-      <div className="bg-white rounded-lg shadow-2xl max-w-lg w-full">
+      <div className="bg-white rounded-lg shadow-2xl max-w-2xl w-full max-h-[90vh] overflow-y-auto">
         {/* Header */}
-        <div className="flex items-center justify-between p-6 border-b border-border">
+        <div className="flex items-center justify-between p-6 border-b border-border sticky top-0 bg-white">
           <div>
-            <h2 className="text-2xl font-bold text-primary">Upload Data Dictionary</h2>
+            <h2 className="text-2xl font-bold text-primary">Upload Configuration Files</h2>
             <p className="text-sm text-text-light mt-1">{atlasName}</p>
           </div>
           <button
             onClick={handleClose}
-            disabled={isUploading}
+            disabled={anyUploading}
             className="text-text-light hover:text-text transition-colors"
           >
             <X size={24} />
@@ -131,89 +182,163 @@ export default function UploadDataDictDialog({
           {/* Info Alert */}
           <Alert variant="info" dismissible={false}>
             <p className="text-sm">
-              Upload a CSV file containing your data dictionary. This will help provide better context
-              for cohort building. You can skip this step if you don't have a data dictionary.
+              Upload optional configuration files to improve cohort building accuracy. 
+              Both files are optional - you can skip if you don't have them.
             </p>
           </Alert>
 
-          {/* File Upload Area */}
-          <div>
+          {/* Data Dictionary Upload */}
+          <div className="space-y-2">
+            <div className="flex items-center gap-2">
+              <FileText size={20} className="text-primary" />
+              <h3 className="font-semibold text-text">Data Dictionary (CSV)</h3>
+              <span className="text-xs text-text-light bg-secondary px-2 py-0.5 rounded">Optional</span>
+            </div>
+            <p className="text-sm text-text-light">
+              Provides field descriptions and context for better natural language understanding.
+            </p>
             <label
-              htmlFor="file-upload"
-              className={`relative flex flex-col items-center justify-center w-full h-48 border-2 border-dashed rounded-lg cursor-pointer transition-all ${
-                selectedFile
+              htmlFor="data-dict-upload"
+              className={`relative flex flex-col items-center justify-center w-full h-32 border-2 border-dashed rounded-lg cursor-pointer transition-all ${
+                dataDictState.file
                   ? 'border-success bg-success/5'
                   : 'border-border bg-secondary hover:bg-gray-100'
-              } ${isUploading ? 'pointer-events-none opacity-50' : ''}`}
+              } ${anyUploading ? 'pointer-events-none opacity-50' : ''}`}
             >
-              <div className="flex flex-col items-center justify-center pt-5 pb-6">
-                {selectedFile ? (
+              <div className="flex flex-col items-center justify-center py-4">
+                {dataDictState.file ? (
                   <>
-                    <CheckCircle className="w-12 h-12 mb-3 text-success" />
-                    <div className="flex items-center gap-2 mb-2">
-                      <FileText size={20} className="text-success" />
-                      <p className="text-sm font-semibold text-text">{selectedFile.name}</p>
-                    </div>
+                    <CheckCircle className="w-8 h-8 mb-2 text-success" />
+                    <p className="text-sm font-semibold text-text">{dataDictState.file.name}</p>
                     <p className="text-xs text-text-light">
-                      {(selectedFile.size / 1024).toFixed(2)} KB
+                      {(dataDictState.file.size / 1024).toFixed(2)} KB
                     </p>
-                    <p className="text-xs text-primary mt-2">Click to change file</p>
                   </>
                 ) : (
                   <>
-                    <Upload className="w-12 h-12 mb-3 text-text-light" />
-                    <p className="mb-2 text-sm text-text">
-                      <span className="font-semibold">Click to upload</span> or drag and drop
-                    </p>
-                    <p className="text-xs text-text-light">CSV files only</p>
+                    <Upload className="w-8 h-8 mb-2 text-text-light" />
+                    <p className="text-sm text-text">Click to upload CSV</p>
                   </>
                 )}
               </div>
               <input
-                id="file-upload"
+                id="data-dict-upload"
                 type="file"
                 accept=".csv"
                 className="hidden"
-                onChange={handleFileSelect}
-                disabled={isUploading}
+                onChange={handleDataDictSelect}
+                disabled={anyUploading}
               />
             </label>
+            {dataDictState.error && (
+              <p className="text-sm text-danger flex items-center gap-1">
+                <AlertCircle size={14} /> {dataDictState.error}
+              </p>
+            )}
+            {dataDictState.success && (
+              <p className="text-sm text-success flex items-center gap-1">
+                <CheckCircle size={14} /> Uploaded successfully
+              </p>
+            )}
           </div>
 
-          {/* Error Message */}
-          {error && (
-            <Alert variant="error" dismissible={false}>
-              {error}
-            </Alert>
-          )}
+          {/* Schema Keys Upload */}
+          <div className="space-y-2">
+            <div className="flex items-center gap-2">
+              <FileJson2 size={20} className="text-primary" />
+              <h3 className="font-semibold text-text">Schema Keys (JSON)</h3>
+              <span className="text-xs text-text-light bg-secondary px-2 py-0.5 rounded">Optional</span>
+            </div>
+            <p className="text-sm text-text-light">
+              Defines primary keys and foreign key relationships between tables for accurate SQL generation.
+            </p>
+            <label
+              htmlFor="schema-keys-upload"
+              className={`relative flex flex-col items-center justify-center w-full h-32 border-2 border-dashed rounded-lg cursor-pointer transition-all ${
+                schemaKeysState.file
+                  ? 'border-success bg-success/5'
+                  : 'border-border bg-secondary hover:bg-gray-100'
+              } ${anyUploading ? 'pointer-events-none opacity-50' : ''}`}
+            >
+              <div className="flex flex-col items-center justify-center py-4">
+                {schemaKeysState.file ? (
+                  <>
+                    <CheckCircle className="w-8 h-8 mb-2 text-success" />
+                    <p className="text-sm font-semibold text-text">{schemaKeysState.file.name}</p>
+                    <p className="text-xs text-text-light">
+                      {(schemaKeysState.file.size / 1024).toFixed(2)} KB
+                    </p>
+                  </>
+                ) : (
+                  <>
+                    <Upload className="w-8 h-8 mb-2 text-text-light" />
+                    <p className="text-sm text-text">Click to upload JSON</p>
+                  </>
+                )}
+              </div>
+              <input
+                id="schema-keys-upload"
+                type="file"
+                accept=".json"
+                className="hidden"
+                onChange={handleSchemaKeysSelect}
+                disabled={anyUploading}
+              />
+            </label>
+            {schemaKeysState.error && (
+              <p className="text-sm text-danger flex items-center gap-1">
+                <AlertCircle size={14} /> {schemaKeysState.error}
+              </p>
+            )}
+            {schemaKeysState.success && (
+              <p className="text-sm text-success flex items-center gap-1">
+                <CheckCircle size={14} /> Uploaded successfully
+              </p>
+            )}
+            
+            {/* Schema Keys Format Help */}
+            <details className="text-xs text-text-light">
+              <summary className="cursor-pointer hover:text-text">View expected format</summary>
+              <pre className="mt-2 p-3 bg-gray-100 rounded overflow-x-auto">
+{`{
+  "table_name": {
+    "pk": "primary_key_column",
+    "fks": {
+      "foreign_key_column": "referenced_table"
+    }
+  }
+}`}
+              </pre>
+            </details>
+          </div>
 
-          {/* Success Message */}
-          {uploadSuccess && (
+          {/* All Success Message */}
+          {allSuccess && (
             <Alert variant="success" dismissible={false}>
               <div className="flex items-center gap-2">
                 <CheckCircle size={20} />
-                <span>Data dictionary uploaded successfully!</span>
+                <span>Files uploaded successfully! Processing will begin shortly...</span>
               </div>
             </Alert>
           )}
         </div>
 
         {/* Footer */}
-        <div className="flex items-center justify-end gap-3 p-6 border-t border-border bg-secondary">
+        <div className="flex items-center justify-end gap-3 p-6 border-t border-border bg-secondary sticky bottom-0">
           <Button
             onClick={handleSkip}
-            disabled={isUploading || uploadSuccess}
+            disabled={anyUploading || isProcessing}
             variant="secondary"
           >
-            Skip
+            Skip & Process
           </Button>
           <Button
-            onClick={handleUpload}
-            disabled={!selectedFile || isUploading || uploadSuccess}
+            onClick={handleUploadAndProcess}
+            disabled={(!dataDictState.file && !schemaKeysState.file) || anyUploading || allSuccess}
             variant="primary"
-            loading={isUploading}
+            loading={isProcessing}
           >
-            {isUploading ? 'Uploading...' : 'Upload & Process'}
+            {isProcessing ? 'Processing...' : 'Upload & Process'}
           </Button>
         </div>
       </div>

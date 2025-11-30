@@ -1,47 +1,115 @@
+'use client';
 
-import React, { useState } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import { useFilters } from '@/app/contexts/FilterContext';
-import { ChevronDown, ChevronRight, Filter as FilterIcon, Search, X } from 'lucide-react';
-import { getTableNames, getFilterableFields, getFieldUniqueValues, SchemaField } from '@/app/lib/schemaHelper';
-
-
-interface FilterField {
-  tableName: string;
-  fieldName: string;
-  field: SchemaField;
-  displayName: string;
-}
+import { useFieldMappings } from '@/app/contexts/FieldMappingContext';
+import { ChevronDown, ChevronRight, Filter as FilterIcon, Search, Loader2, Check, Sparkles } from 'lucide-react';
+import {
+  fetchProjectTables,
+  fetchTableFields,
+  fetchFieldValues,
+  createFieldMapping,
+  TableInfo,
+  FieldInfo,
+} from '@/app/lib/fieldMappingService';
 
 interface FilterDropdownPanelProps {
-  projectId?: string;
+  projectId?: number;
 }
 
 export default function FilterDropdownPanel({ projectId }: FilterDropdownPanelProps) {
   const { filters, addFilters } = useFilters();
+  const { fieldMappings, getAgentMappings, getConfirmedMappings, refreshMappings, deleteFieldMapping } = useFieldMappings();
+  
+  // State for lazy-loaded data
+  const [tables, setTables] = useState<TableInfo[]>([]);
+  const [tableFields, setTableFields] = useState<Map<string, FieldInfo[]>>(new Map());
+  const [fieldValues, setFieldValues] = useState<Map<string, any[]>>(new Map());
+  
+  // Loading states
+  const [loadingTables, setLoadingTables] = useState(false);
+  const [loadingFields, setLoadingFields] = useState<Set<string>>(new Set());
+  const [loadingValues, setLoadingValues] = useState<Set<string>>(new Set());
+  
+  // UI states
   const [expandedTables, setExpandedTables] = useState<Set<string>>(new Set());
   const [expandedFields, setExpandedFields] = useState<Set<string>>(new Set());
   const [searchTerms, setSearchTerms] = useState<Map<string, string>>(new Map());
   const [showMoreFields, setShowMoreFields] = useState<Set<string>>(new Set());
-
-  // State for input values
+  
+  // Input states
   const [intInputs, setIntInputs] = useState<Map<string, { min: string; max: string }>>(new Map());
   const [floatInputs, setFloatInputs] = useState<Map<string, { min: string; max: string }>>(new Map());
   const [selectedValues, setSelectedValues] = useState<Map<string, Set<string>>>(new Map());
 
-  // Get all filterable fields organized by table
-  const tableFields: Array<{ tableName: string; fields: FilterField[] }> = React.useMemo(() => {
-    const tableNames = getTableNames();
+  // Load tables on mount
+  useEffect(() => {
+    if (projectId) {
+      loadTables();
+    }
+  }, [projectId]);
+
+  const loadTables = async () => {
+    if (!projectId) return;
     
-    return tableNames.map(tableName => ({
-      tableName,
-      fields: getFilterableFields(tableName).map(({ fieldName, field }) => ({
-        tableName,
-        fieldName,
-        field,
-        displayName: fieldName.replace(/_/g, ' ').replace(/\b\w/g, l => l.toUpperCase()),
-      })),
-    })).filter(t => t.fields.length > 0);
-  }, []);
+    setLoadingTables(true);
+    try {
+      const tableList = await fetchProjectTables(projectId);
+      setTables(tableList);
+    } catch (error) {
+      console.error('Failed to load tables:', error);
+    } finally {
+      setLoadingTables(false);
+    }
+  };
+
+  const loadTableFields = async (tableName: string) => {
+    if (!projectId || tableFields.has(tableName)) return;
+    
+    setLoadingFields(prev => new Set(prev).add(tableName));
+    try {
+      const fields = await fetchTableFields(projectId, tableName);
+      // Filter out ID fields and 100% unique fields
+      const filterableFields = fields.filter(
+        field =>
+          !field.field_name.toLowerCase().includes('_id') &&
+          field.field_name.toLowerCase() !== 'id' &&
+          field.field_uniqueness_percent < 100
+      );
+      setTableFields(prev => new Map(prev).set(tableName, filterableFields));
+    } catch (error) {
+      console.error('Failed to load fields:', error);
+    } finally {
+      setLoadingFields(prev => {
+        const newSet = new Set(prev);
+        newSet.delete(tableName);
+        return newSet;
+      });
+    }
+  };
+
+  const loadFieldValues = async (tableName: string, fieldName: string) => {
+    if (!projectId) return;
+    
+    const key = getFieldKey(tableName, fieldName);
+    if (fieldValues.has(key)) return;
+    
+    setLoadingValues(prev => new Set(prev).add(key));
+    try {
+      const result = await fetchFieldValues(projectId, tableName, fieldName, 100);
+      // Handle both array of values or array of objects with value property
+      const values = result.values || [];
+      setFieldValues(prev => new Map(prev).set(key, values));
+    } catch (error) {
+      console.error('Failed to load field values:', error);
+    } finally {
+      setLoadingValues(prev => {
+        const newSet = new Set(prev);
+        newSet.delete(key);
+        return newSet;
+      });
+    }
+  };
 
   const toggleTable = (tableName: string) => {
     setExpandedTables(prev => {
@@ -50,22 +118,58 @@ export default function FilterDropdownPanel({ projectId }: FilterDropdownPanelPr
         newSet.delete(tableName);
       } else {
         newSet.add(tableName);
+        // Lazy load fields when table is expanded
+        loadTableFields(tableName);
       }
       return newSet;
     });
   };
 
-  const toggleField = (key: string) => {
+  const toggleField = (tableName: string, fieldName: string, fieldType: string) => {
+    const key = getFieldKey(tableName, fieldName);
     setExpandedFields(prev => {
       const newSet = new Set(prev);
       if (newSet.has(key)) {
         newSet.delete(key);
       } else {
         newSet.add(key);
+        // Lazy load values for object type fields when expanded
+        if (fieldType === 'object') {
+          loadFieldValues(tableName, fieldName);
+        }
+        // Initialize selected values from existing field mappings
+        initializeSelectedValuesFromMappings(tableName, fieldName);
       }
       return newSet;
     });
   };
+
+  // Initialize selected values based on existing field mappings
+  const initializeSelectedValuesFromMappings = useCallback((tableName: string, fieldName: string) => {
+    const key = getFieldKey(tableName, fieldName);
+    const existingMappings = fieldMappings.filter(
+      m => m.table_name === tableName && m.field_name === fieldName
+    );
+
+    if (existingMappings.length > 0) {
+      const appliedValues = new Set<string>();
+      existingMappings.forEach(mapping => {
+        if (Array.isArray(mapping.value)) {
+          mapping.value.forEach((v: any) => appliedValues.add(v.toString()));
+        } else if (mapping.value !== null && mapping.value !== undefined) {
+          appliedValues.add(mapping.value.toString());
+        }
+      });
+      
+      if (appliedValues.size > 0) {
+        setSelectedValues(prev => {
+          const newMap = new Map(prev);
+          newMap.set(key, appliedValues);
+          return newMap;
+        });
+      }
+    }
+  }, [fieldMappings]);
 
   const getFieldKey = (tableName: string, fieldName: string) => `${tableName}.${fieldName}`;
 
@@ -85,7 +189,6 @@ export default function FilterDropdownPanel({ projectId }: FilterDropdownPanelPr
     });
   };
 
-  // Handle value selection for dropdowns
   const toggleValueSelection = (key: string, value: string) => {
     setSelectedValues(prev => {
       const newMap = new Map(prev);
@@ -103,174 +206,321 @@ export default function FilterDropdownPanel({ projectId }: FilterDropdownPanelPr
     });
   };
 
-  // Apply filter for a field
-  const applyFieldFilter = (filterField: FilterField) => {
-    const key = getFieldKey(filterField.tableName, filterField.fieldName);
-    const dataType = filterField.field.field_data_type;
+  const applyFieldFilter = async (tableName: string, fieldName: string, fieldType: string) => {
+    if (!projectId) return;
+    
+    const key = getFieldKey(tableName, fieldName);
+    
+    if (fieldType === 'object') {
+      const selected = selectedValues.get(key) || new Set();
+      const values = Array.from(selected);
 
-    if (dataType === 'object') {
-      // Apply dropdown selections
-      const selected = selectedValues.get(key);
-      if (!selected || selected.size === 0) return;
+      // If nothing is selected, remove existing mappings for this field
+      if (values.length === 0) {
+        try {
+          // Find and delete all existing mappings for this field
+          const existingMappings = fieldMappings.filter(
+            m => m.table_name === tableName && m.field_name === fieldName && m.source === 'user'
+          );
+          
+          for (const mapping of existingMappings) {
+            await deleteFieldMapping(projectId, mapping.id);
+          }
+          
+          await refreshMappings();
+          return;
+        } catch (error) {
+          console.error('Failed to remove filter:', error);
+          return;
+        }
+      }
 
-      const newFilters = Array.from(selected).map(value => ({
-        id: `filter-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`,
-        type: 'include' as const,
-        text: `${filterField.fieldName} is ${value}`,
-        entities: [value.toLowerCase()],
-        db_mappings: {
-          [value.toLowerCase()]: {
-            entity_class: 'attribute',
-            'table.field': `${filterField.tableName}.${filterField.fieldName}`,
-            ranked_matches: [value],
-            mapped_concept: value,
-            mapping_method: 'direct',
-            reason: null,
-            top_candidates: [value],
+      const concept = `${fieldName} is ${values.join(' or ')}`;
+      const operator = values.length > 1 ? 'IN' : '=';
+      const sqlCriterion =
+        values.length > 1
+          ? `${tableName}.${fieldName} IN (${values.map(v => `'${v}'`).join(', ')})`
+          : `${tableName}.${fieldName} = '${values[0]}'`;
+      const displayText = `${fieldName}: ${values.join(', ')}`;
+
+      try {
+        // Delete existing mappings for this field first (to replace them)
+        const existingMappings = fieldMappings.filter(
+          m => m.table_name === tableName && m.field_name === fieldName && m.source === 'user'
+        );
+        
+        for (const mapping of existingMappings) {
+          await deleteFieldMapping(projectId, mapping.id);
+        }
+
+        // Save new field mapping
+        await createFieldMapping(projectId, {
+          table_name: tableName,
+          field_name: fieldName,
+          field_type: fieldType,
+          concept,
+          operator,
+          value: values.length === 1 ? values[0] : values,
+          sql_criterion: sqlCriterion,
+          display_text: displayText,
+          source: 'user',
+          status: 'draft',
+        });
+
+        // Refresh mappings to get the latest state
+        await refreshMappings();
+
+        // Also add to legacy filter context for backward compatibility
+        const newFilters = values.map(value => ({
+          id: `filter-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`,
+          type: 'include' as const,
+          text: `${fieldName} is ${value}`,
+          entities: [value.toLowerCase()],
+          db_mappings: {
+            [value.toLowerCase()]: {
+              entity_class: 'attribute',
+              'table.field': `${tableName}.${fieldName}`,
+              ranked_matches: [value],
+              mapped_concept: value,
+              mapping_method: 'direct',
+              reason: null,
+              top_candidates: [value],
+            },
           },
-        },
-        revised_criterion: `${filterField.tableName}.${filterField.fieldName} = '${value}'`,
-        enabled: true,
-        affectedCount: 0,
-      }));
+          revised_criterion: `${tableName}.${fieldName} = '${value}'`,
+          enabled: true,
+          affectedCount: 0,
+        }));
+        addFilters(newFilters);
 
-      addFilters(newFilters);
-      // Clear selection after applying
-      setSelectedValues(prev => {
-        const newMap = new Map(prev);
-        newMap.delete(key);
-        return newMap;
-      });
-    } else if (dataType === 'int64') {
-      // Apply int range filter
-      const input = intInputs.get(key);
-      if (!input || (input.min === '' && input.max === '')) return;
+        // Keep the selection checked - don't clear it
+        // The checkboxes should remain checked to show they're applied
+      } catch (error) {
+        console.error('Failed to apply filter:', error);
+      }
+    } else if (fieldType === 'int64') {
+      const input = intInputs.get(key) || { min: '', max: '' };
+      
+      // If both inputs are empty, remove existing mappings
+      if (input.min === '' && input.max === '') {
+        try {
+          const existingMappings = fieldMappings.filter(
+            m => m.table_name === tableName && m.field_name === fieldName && m.source === 'user'
+          );
+          
+          for (const mapping of existingMappings) {
+            await deleteFieldMapping(projectId, mapping.id);
+          }
+          
+          await refreshMappings();
+          return;
+        } catch (error) {
+          console.error('Failed to remove filter:', error);
+          return;
+        }
+      }
 
       const minVal = input.min !== '' ? parseInt(input.min) : undefined;
       const maxVal = input.max !== '' ? parseInt(input.max) : undefined;
 
       let criterion = '';
       let text = '';
-      
+      let operator = '';
+      let value: any;
+
       if (minVal !== undefined && maxVal !== undefined) {
-        criterion = `${filterField.tableName}.${filterField.fieldName} BETWEEN ${minVal} AND ${maxVal}`;
-        text = `${filterField.fieldName} between ${minVal} and ${maxVal}`;
+        criterion = `${tableName}.${fieldName} BETWEEN ${minVal} AND ${maxVal}`;
+        text = `${fieldName} between ${minVal} and ${maxVal}`;
+        operator = 'BETWEEN';
+        value = { min: minVal, max: maxVal };
       } else if (minVal !== undefined) {
-        criterion = `${filterField.tableName}.${filterField.fieldName} >= ${minVal}`;
-        text = `${filterField.fieldName} >= ${minVal}`;
+        criterion = `${tableName}.${fieldName} >= ${minVal}`;
+        text = `${fieldName} >= ${minVal}`;
+        operator = '>=';
+        value = minVal;
       } else if (maxVal !== undefined) {
-        criterion = `${filterField.tableName}.${filterField.fieldName} <= ${maxVal}`;
-        text = `${filterField.fieldName} <= ${maxVal}`;
+        criterion = `${tableName}.${fieldName} <= ${maxVal}`;
+        text = `${fieldName} <= ${maxVal}`;
+        operator = '<=';
+        value = maxVal;
       }
 
-      const newFilter = {
-        id: `filter-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`,
-        type: 'include' as const,
-        text,
-        entities: [filterField.fieldName],
-        db_mappings: {
-          [filterField.fieldName]: {
-            entity_class: 'numeric',
-            'table.field': `${filterField.tableName}.${filterField.fieldName}`,
-            ranked_matches: [],
-            mapped_concept: criterion,
-            mapping_method: 'range',
-            reason: null,
-            top_candidates: [],
-          },
-        },
-        revised_criterion: criterion,
-        enabled: true,
-        affectedCount: 0,
-      };
+      try {
+        // Delete existing mappings for this field first (to replace them)
+        const existingMappings = fieldMappings.filter(
+          m => m.table_name === tableName && m.field_name === fieldName && m.source === 'user'
+        );
+        
+        for (const mapping of existingMappings) {
+          await deleteFieldMapping(projectId, mapping.id);
+        }
 
-      addFilters([newFilter]);
-      // Clear inputs
-      setIntInputs(prev => {
-        const newMap = new Map(prev);
-        newMap.delete(key);
-        return newMap;
-      });
-    } else if (dataType === 'float64') {
-      // Apply float range filter
-      const input = floatInputs.get(key);
-      if (!input || (input.min === '' && input.max === '')) return;
+        await createFieldMapping(projectId, {
+          table_name: tableName,
+          field_name: fieldName,
+          field_type: fieldType,
+          concept: text,
+          operator,
+          value,
+          sql_criterion: criterion,
+          display_text: text,
+          source: 'user',
+          status: 'draft',
+        });
+
+        // Refresh mappings to get the latest state
+        await refreshMappings();
+
+        // Add to legacy context
+        const newFilter = {
+          id: `filter-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`,
+          type: 'include' as const,
+          text,
+          entities: [fieldName],
+          db_mappings: {
+            [fieldName]: {
+              entity_class: 'numeric',
+              'table.field': `${tableName}.${fieldName}`,
+              ranked_matches: [],
+              mapped_concept: criterion,
+              mapping_method: 'range',
+              reason: null,
+              top_candidates: [],
+            },
+          },
+          revised_criterion: criterion,
+          enabled: true,
+          affectedCount: 0,
+        };
+        addFilters([newFilter]);
+
+        // Keep the input values to show they're applied (don't clear)
+        // Optionally, you could add a visual indicator instead
+      } catch (error) {
+        console.error('Failed to apply filter:', error);
+      }
+    } else if (fieldType === 'float64') {
+      const input = floatInputs.get(key) || { min: '', max: '' };
+      
+      // If both inputs are empty, remove existing mappings
+      if (input.min === '' && input.max === '') {
+        try {
+          const existingMappings = fieldMappings.filter(
+            m => m.table_name === tableName && m.field_name === fieldName && m.source === 'user'
+          );
+          
+          for (const mapping of existingMappings) {
+            await deleteFieldMapping(projectId, mapping.id);
+          }
+          
+          await refreshMappings();
+          return;
+        } catch (error) {
+          console.error('Failed to remove filter:', error);
+          return;
+        }
+      }
 
       const minVal = input.min !== '' ? parseFloat(input.min) : undefined;
       const maxVal = input.max !== '' ? parseFloat(input.max) : undefined;
 
       let criterion = '';
       let text = '';
-      
+      let operator = '';
+      let value: any;
+
       if (minVal !== undefined && maxVal !== undefined) {
-        criterion = `${filterField.tableName}.${filterField.fieldName} BETWEEN ${minVal} AND ${maxVal}`;
-        text = `${filterField.fieldName} between ${minVal} and ${maxVal}`;
+        criterion = `${tableName}.${fieldName} BETWEEN ${minVal} AND ${maxVal}`;
+        text = `${fieldName} between ${minVal} and ${maxVal}`;
+        operator = 'BETWEEN';
+        value = { min: minVal, max: maxVal };
       } else if (minVal !== undefined) {
-        criterion = `${filterField.tableName}.${filterField.fieldName} >= ${minVal}`;
-        text = `${filterField.fieldName} >= ${minVal}`;
+        criterion = `${tableName}.${fieldName} >= ${minVal}`;
+        text = `${fieldName} >= ${minVal}`;
+        operator = '>=';
+        value = minVal;
       } else if (maxVal !== undefined) {
-        criterion = `${filterField.tableName}.${filterField.fieldName} <= ${maxVal}`;
-        text = `${filterField.fieldName} <= ${maxVal}`;
+        criterion = `${tableName}.${fieldName} <= ${maxVal}`;
+        text = `${fieldName} <= ${maxVal}`;
+        operator = '<=';
+        value = maxVal;
       }
 
-      const newFilter = {
-        id: `filter-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`,
-        type: 'include' as const,
-        text,
-        entities: [filterField.fieldName],
-        db_mappings: {
-          [filterField.fieldName]: {
-            entity_class: 'numeric',
-            'table.field': `${filterField.tableName}.${filterField.fieldName}`,
-            ranked_matches: [],
-            mapped_concept: criterion,
-            mapping_method: 'range',
-            reason: null,
-            top_candidates: [],
-          },
-        },
-        revised_criterion: criterion,
-        enabled: true,
-        affectedCount: 0,
-      };
+      try {
+        // Delete existing mappings for this field first (to replace them)
+        const existingMappings = fieldMappings.filter(
+          m => m.table_name === tableName && m.field_name === fieldName && m.source === 'user'
+        );
+        
+        for (const mapping of existingMappings) {
+          await deleteFieldMapping(projectId, mapping.id);
+        }
 
-      addFilters([newFilter]);
-      // Clear inputs
-      setFloatInputs(prev => {
-        const newMap = new Map(prev);
-        newMap.delete(key);
-        return newMap;
-      });
+        await createFieldMapping(projectId, {
+          table_name: tableName,
+          field_name: fieldName,
+          field_type: fieldType,
+          concept: text,
+          operator,
+          value,
+          sql_criterion: criterion,
+          display_text: text,
+          source: 'user',
+          status: 'draft',
+        });
+
+        // Refresh mappings to get the latest state
+        await refreshMappings();
+
+        const newFilter = {
+          id: `filter-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`,
+          type: 'include' as const,
+          text,
+          entities: [fieldName],
+          db_mappings: {
+            [fieldName]: {
+              entity_class: 'numeric',
+              'table.field': `${tableName}.${fieldName}`,
+              ranked_matches: [],
+              mapped_concept: criterion,
+              mapping_method: 'range',
+              reason: null,
+              top_candidates: [],
+            },
+          },
+          revised_criterion: criterion,
+          enabled: true,
+          affectedCount: 0,
+        };
+        addFilters([newFilter]);
+
+        // Keep the input values to show they're applied (don't clear)
+        // Optionally, you could add a visual indicator instead
+      } catch (error) {
+        console.error('Failed to apply filter:', error);
+      }
     }
   };
 
-  // Render field UI based on data type
-  const renderFieldInput = (filterField: FilterField) => {
-    const key = getFieldKey(filterField.tableName, filterField.fieldName);
-    const dataType = filterField.field.field_data_type;
+  const renderFieldInput = (tableName: string, fieldName: string, fieldType: string) => {
+    const key = getFieldKey(tableName, fieldName);
     const searchTerm = searchTerms.get(key) || '';
     const showMore = showMoreFields.has(key);
+    const isLoadingValues = loadingValues.has(key);
 
-    if (dataType === 'object') {
-      // Dropdown with searchable values
-      const uniqueValues = getFieldUniqueValues(filterField.tableName, filterField.fieldName);
-      const hasUniqueValues = Array.isArray(filterField.field.field_unique_values);
-      const valuesToShow = hasUniqueValues ? uniqueValues : filterField.field.field_sample_values;
-      
-      // Filter by search term
-      const filteredValues = valuesToShow.filter((val: any) =>
+    if (fieldType === 'object') {
+      const values = fieldValues.get(key) || [];
+      const filteredValues = values.filter((val: any) =>
         val.toString().toLowerCase().includes(searchTerm.toLowerCase())
       );
 
       const displayLimit = showMore ? filteredValues.length : Math.min(5, filteredValues.length);
       const displayValues = filteredValues.slice(0, displayLimit);
       const hasMore = filteredValues.length > displayLimit;
-
       const selected = selectedValues.get(key) || new Set();
 
       return (
         <div className="space-y-2">
-          {/* Search box */}
           <div className="relative">
             <Search className="absolute left-2 top-2 w-4 h-4" style={{ color: '#6B7280' }} />
             <input
@@ -283,66 +533,64 @@ export default function FilterDropdownPanel({ projectId }: FilterDropdownPanelPr
             />
           </div>
 
-          {/* Values list */}
-          <div className="max-h-48 overflow-y-auto space-y-1">
-            {displayValues.map((value: any, idx: number) => (
-              <label
-                key={idx}
-                className="flex items-center gap-2 p-2 rounded cursor-pointer transition-colors bg-white hover:bg-gray-50"
+          {isLoadingValues ? (
+            <div className="flex items-center justify-center py-4">
+              <Loader2 className="w-5 h-5 animate-spin" style={{ color: '#8E42EE' }} />
+            </div>
+          ) : (
+            <>
+              <div className="max-h-48 overflow-y-auto space-y-1">
+                {displayValues.map((value: any, idx: number) => (
+                  <label
+                    key={idx}
+                    className="flex items-center gap-2 p-2 rounded cursor-pointer transition-colors bg-white hover:bg-gray-50"
+                  >
+                    <input
+                      type="checkbox"
+                      checked={selected.has(value.toString())}
+                      onChange={() => toggleValueSelection(key, value.toString())}
+                      className="cursor-pointer"
+                      style={{ accentColor: '#8E42EE' }}
+                    />
+                    <span className="text-sm" style={{ color: '#111827' }}>
+                      {value.toString()}
+                    </span>
+                  </label>
+                ))}
+              </div>
+
+              {hasMore && (
+                <button
+                  onClick={() => toggleShowMore(key)}
+                  className="text-xs px-2 py-1 rounded transition-colors w-full"
+                  style={{ color: '#8E42EE', backgroundColor: '#8E42EE10' }}
+                  onMouseEnter={e => (e.currentTarget.style.backgroundColor = '#8E42EE20')}
+                  onMouseLeave={e => (e.currentTarget.style.backgroundColor = '#8E42EE10')}
+                >
+                  {showMore ? 'Show less' : `Show more (${filteredValues.length - displayLimit} more)`}
+                </button>
+              )}
+
+              <button
+                onClick={() => applyFieldFilter(tableName, fieldName, fieldType)}
+                className="w-full px-3 py-2 rounded font-medium text-sm transition-colors"
+                style={{ 
+                  backgroundColor: selected.size > 0 ? '#8E42EE' : '#6B7280', 
+                  color: 'white' 
+                }}
+                onMouseEnter={e => e.currentTarget.style.backgroundColor = selected.size > 0 ? '#6A42EE' : '#4B5563'}
+                onMouseLeave={e => e.currentTarget.style.backgroundColor = selected.size > 0 ? '#8E42EE' : '#6B7280'}
               >
-                <input
-                  type="checkbox"
-                  checked={selected.has(value.toString())}
-                  onChange={() => toggleValueSelection(key, value.toString())}
-                  className="cursor-pointer"
-                  style={{ accentColor: '#8E42EE' }}
-                />
-                <span className="text-sm" style={{ color: '#111827' }}>
-                  {value.toString()}
-                </span>
-              </label>
-            ))}
-          </div>
-
-          {/* Show more button */}
-          {hasMore && (
-            <button
-              onClick={() => toggleShowMore(key)}
-              className="text-xs px-2 py-1 rounded transition-colors w-full"
-              style={{ color: '#8E42EE', backgroundColor: '#8E42EE10' }}
-              onMouseEnter={e => (e.currentTarget.style.backgroundColor = '#8E42EE20')}
-              onMouseLeave={e => (e.currentTarget.style.backgroundColor = '#8E42EE10')}
-            >
-              {showMore ? 'Show less' : `Show more (${filteredValues.length - displayLimit} more)`}
-            </button>
-          )}
-
-          {!hasUniqueValues && (
-            <p className="text-xs" style={{ color: '#6B7280' }}>
-              Showing sample values. Use search for more options.
-            </p>
-          )}
-
-          {/* Apply button */}
-          {selected.size > 0 && (
-            <button
-              onClick={() => applyFieldFilter(filterField)}
-              className="w-full px-3 py-2 rounded font-medium text-sm transition-colors"
-              style={{ backgroundColor: '#8E42EE', color: 'white' }}
-              onMouseEnter={e => (e.currentTarget.style.backgroundColor = '#6A42EE')}
-              onMouseLeave={e => (e.currentTarget.style.backgroundColor = '#8E42EE')}
-            >
-              Apply ({selected.size} selected)
-            </button>
+                {selected.size > 0 
+                  ? `Apply (${selected.size} selected)` 
+                  : 'Remove Filter'}
+              </button>
+            </>
           )}
         </div>
       );
-    } else if (dataType === 'int64') {
-      // Integer number input with min/max
+    } else if (fieldType === 'int64') {
       const input = intInputs.get(key) || { min: '', max: '' };
-      const samples = filterField.field.field_sample_values;
-      const min = samples && samples.length > 0 ? Math.min(...samples) : undefined;
-      const max = samples && samples.length > 0 ? Math.max(...samples) : undefined;
 
       return (
         <div className="space-y-3">
@@ -353,7 +601,7 @@ export default function FilterDropdownPanel({ projectId }: FilterDropdownPanelPr
               </label>
               <input
                 type="number"
-                placeholder={min !== undefined ? `e.g. ${min}` : 'Min'}
+                placeholder="Min"
                 value={input.min}
                 onChange={e =>
                   setIntInputs(prev => new Map(prev).set(key, { ...input, min: e.target.value }))
@@ -368,7 +616,7 @@ export default function FilterDropdownPanel({ projectId }: FilterDropdownPanelPr
               </label>
               <input
                 type="number"
-                placeholder={max !== undefined ? `e.g. ${max}` : 'Max'}
+                placeholder="Max"
                 value={input.max}
                 onChange={e =>
                   setIntInputs(prev => new Map(prev).set(key, { ...input, max: e.target.value }))
@@ -379,31 +627,22 @@ export default function FilterDropdownPanel({ projectId }: FilterDropdownPanelPr
             </div>
           </div>
 
-          {min !== undefined && max !== undefined && (
-            <p className="text-xs" style={{ color: '#6B7280' }}>
-              Range: {min} - {max}
-            </p>
-          )}
-
-          {(input.min !== '' || input.max !== '') && (
-            <button
-              onClick={() => applyFieldFilter(filterField)}
-              className="w-full px-3 py-2 rounded font-medium text-sm transition-colors"
-              style={{ backgroundColor: '#8E42EE', color: 'white' }}
-              onMouseEnter={e => (e.currentTarget.style.backgroundColor = '#6A42EE')}
-              onMouseLeave={e => (e.currentTarget.style.backgroundColor = '#8E42EE')}
-            >
-              Apply Filter
-            </button>
-          )}
+          <button
+            onClick={() => applyFieldFilter(tableName, fieldName, fieldType)}
+            className="w-full px-3 py-2 rounded font-medium text-sm transition-colors"
+            style={{ 
+              backgroundColor: (input.min !== '' || input.max !== '') ? '#8E42EE' : '#6B7280', 
+              color: 'white' 
+            }}
+            onMouseEnter={e => e.currentTarget.style.backgroundColor = (input.min !== '' || input.max !== '') ? '#6A42EE' : '#4B5563'}
+            onMouseLeave={e => e.currentTarget.style.backgroundColor = (input.min !== '' || input.max !== '') ? '#8E42EE' : '#6B7280'}
+          >
+            {(input.min !== '' || input.max !== '') ? 'Apply Filter' : 'Remove Filter'}
+          </button>
         </div>
       );
-    } else if (dataType === 'float64') {
-      // Float number input with min/max
+    } else if (fieldType === 'float64') {
       const input = floatInputs.get(key) || { min: '', max: '' };
-      const samples = filterField.field.field_sample_values;
-      const min = samples && samples.length > 0 ? Math.min(...samples) : undefined;
-      const max = samples && samples.length > 0 ? Math.max(...samples) : undefined;
 
       return (
         <div className="space-y-3">
@@ -415,7 +654,7 @@ export default function FilterDropdownPanel({ projectId }: FilterDropdownPanelPr
               <input
                 type="number"
                 step="any"
-                placeholder={min !== undefined ? `e.g. ${min.toFixed(2)}` : 'Min'}
+                placeholder="Min"
                 value={input.min}
                 onChange={e =>
                   setFloatInputs(prev => new Map(prev).set(key, { ...input, min: e.target.value }))
@@ -431,7 +670,7 @@ export default function FilterDropdownPanel({ projectId }: FilterDropdownPanelPr
               <input
                 type="number"
                 step="any"
-                placeholder={max !== undefined ? `e.g. ${max.toFixed(2)}` : 'Max'}
+                placeholder="Max"
                 value={input.max}
                 onChange={e =>
                   setFloatInputs(prev => new Map(prev).set(key, { ...input, max: e.target.value }))
@@ -442,23 +681,18 @@ export default function FilterDropdownPanel({ projectId }: FilterDropdownPanelPr
             </div>
           </div>
 
-          {min !== undefined && max !== undefined && (
-            <p className="text-xs" style={{ color: '#6B7280' }}>
-              Range: {min.toFixed(2)} - {max.toFixed(2)}
-            </p>
-          )}
-
-          {(input.min !== '' || input.max !== '') && (
-            <button
-              onClick={() => applyFieldFilter(filterField)}
-              className="w-full px-3 py-2 rounded font-medium text-sm transition-colors"
-              style={{ backgroundColor: '#8E42EE', color: 'white' }}
-              onMouseEnter={e => (e.currentTarget.style.backgroundColor = '#6A42EE')}
-              onMouseLeave={e => (e.currentTarget.style.backgroundColor = '#8E42EE')}
-            >
-              Apply Filter
-            </button>
-          )}
+          <button
+            onClick={() => applyFieldFilter(tableName, fieldName, fieldType)}
+            className="w-full px-3 py-2 rounded font-medium text-sm transition-colors"
+            style={{ 
+              backgroundColor: (input.min !== '' || input.max !== '') ? '#8E42EE' : '#6B7280', 
+              color: 'white' 
+            }}
+            onMouseEnter={e => e.currentTarget.style.backgroundColor = (input.min !== '' || input.max !== '') ? '#6A42EE' : '#4B5563'}
+            onMouseLeave={e => e.currentTarget.style.backgroundColor = (input.min !== '' || input.max !== '') ? '#8E42EE' : '#6B7280'}
+          >
+            {(input.min !== '' || input.max !== '') ? 'Apply Filter' : 'Remove Filter'}
+          </button>
         </div>
       );
     }
@@ -466,9 +700,23 @@ export default function FilterDropdownPanel({ projectId }: FilterDropdownPanelPr
     return null;
   };
 
+  if (!projectId) {
+    return (
+      <div className="flex flex-col items-center justify-center h-full p-8">
+        <FilterIcon className="w-12 h-12 mb-3" style={{ color: '#D1D5DB' }} />
+        <p className="text-sm text-center" style={{ color: '#6B7280' }}>
+          No project selected. Filters will appear here when you select a project.
+        </p>
+      </div>
+    );
+  }
+
+  // Get agent-confirmed mappings
+  const agentMappings = getAgentMappings();
+  const confirmedMappings = getConfirmedMappings();
+
   return (
     <div className="flex flex-col h-full">
-      {/* Header */}
       <div className="sticky top-0 bg-white border-b p-4 z-10" style={{ borderColor: '#6B7280' }}>
         <div className="flex items-center gap-2">
           <FilterIcon className="w-5 h-5" style={{ color: '#8E42EE' }} />
@@ -476,98 +724,160 @@ export default function FilterDropdownPanel({ projectId }: FilterDropdownPanelPr
             Add Filters
           </h3>
         </div>
-        <p className="text-xs mt-1" style={{ color: '#6B7280' }}>
-          {tableFields.length} tables with filterable fields
-        </p>
+        {loadingTables ? (
+          <p className="text-xs mt-1" style={{ color: '#6B7280' }}>
+            Loading tables...
+          </p>
+        ) : (
+          <p className="text-xs mt-1" style={{ color: '#6B7280' }}>
+            {tables.length} tables available
+          </p>
+        )}
       </div>
 
-      {/* Tables and Fields */}
       <div className="flex-1 overflow-y-auto p-4">
-        <div className="space-y-3">
-          {tableFields.map(({ tableName, fields }) => (
-            <div
-              key={tableName}
-              className="border rounded-lg overflow-hidden"
-              style={{ borderColor: '#6B7280' }}
-            >
-              {/* Table Header */}
-              <button
-                onClick={() => toggleTable(tableName)}
-                className="w-full flex items-center justify-between p-3 transition-colors bg-white hover:bg-gray-50"
-              >
-                <div className="flex items-center gap-2">
-                  {expandedTables.has(tableName) ? (
-                    <ChevronDown className="w-5 h-5" style={{ color: '#111827' }} />
-                  ) : (
-                    <ChevronRight className="w-5 h-5" style={{ color: '#111827' }} />
-                  )}
-                  <span className="font-semibold text-sm" style={{ color: '#111827' }}>
-                    {tableName.replace(/_/g, ' ').replace(/\b\w/g, l => l.toUpperCase())}
-                  </span>
-                </div>
-                <span
-                  className="text-xs px-2 py-1 rounded"
-                  style={{ backgroundColor: '#6B728020', color: '#6B7280' }}
+        {/* Agent-finalized mappings section */}
+        {confirmedMappings.length > 0 && (
+          <div className="mb-4">
+            <div className="flex items-center gap-2 mb-2">
+              <Sparkles className="w-4 h-4" style={{ color: '#8E42EE' }} />
+              <h4 className="text-sm font-semibold" style={{ color: '#8E42EE' }}>
+                Agent-Confirmed Filters
+              </h4>
+            </div>
+            <div className="space-y-2">
+              {confirmedMappings.map(mapping => (
+                <div
+                  key={mapping.id}
+                  className="p-3 rounded-lg border"
+                  style={{
+                    backgroundColor: '#F5F0FB',
+                    borderColor: '#E8DDFF',
+                  }}
                 >
-                  {fields.length} fields
-                </span>
-              </button>
-
-              {/* Fields */}
-              {expandedTables.has(tableName) && (
-                <div className="border-t" style={{ borderColor: '#6B728040' }}>
-                  <div className="p-2 space-y-2">
-                    {fields.map(filterField => {
-                      const key = getFieldKey(filterField.tableName, filterField.fieldName);
-                      const isExpanded = expandedFields.has(key);
-
-                      return (
-                        <div
-                          key={key}
-                          className="border rounded overflow-hidden"
-                          style={{ borderColor: '#e5e7eb' }}
-                        >
-                          {/* Field Header */}
-                          <button
-                            onClick={() => toggleField(key)}
-                            className="w-full flex items-center justify-between p-2 transition-colors bg-white hover:bg-gray-50"
-                          >
-                            <div className="flex items-center gap-2">
-                              {isExpanded ? (
-                                <ChevronDown className="w-3 h-3" style={{ color: '#6B7280' }} />
-                              ) : (
-                                <ChevronRight className="w-3 h-3" style={{ color: '#6B7280' }} />
-                              )}
-                              <span className="font-medium text-sm" style={{ color: '#111827' }}>
-                                {filterField.displayName}
-                              </span>
-                            </div>
-                            <span
-                              className="text-xs px-1.5 py-0.5 rounded"
-                              style={{
-                                backgroundColor: '#6B728020',
-                                color: '#6B7280',
-                              }}
-                            >
-                              {filterField.field.field_data_type}
-                            </span>
-                          </button>
-
-                          {/* Field Input */}
-                          {isExpanded && (
-                            <div className="bg-gray-50 border-t p-3" style={{ borderColor: '#e5e7eb' }}>
-                              {renderFieldInput(filterField)}
-                            </div>
-                          )}
+                  <div className="flex items-start gap-2">
+                    <Check className="w-4 h-4 mt-0.5 flex-shrink-0" style={{ color: '#8E42EE' }} />
+                    <div className="flex-1 min-w-0">
+                      <p className="text-sm font-medium" style={{ color: '#111827' }}>
+                        {mapping.display_text}
+                      </p>
+                      <p className="text-xs mt-1" style={{ color: '#6B7280' }}>
+                        {mapping.table_name}.{mapping.field_name}
+                      </p>
+                      {mapping.source === 'agent' && (
+                        <div className="flex items-center gap-1 mt-1">
+                          <Sparkles className="w-3 h-3" style={{ color: '#8E42EE' }} />
+                          <span className="text-xs" style={{ color: '#8E42EE' }}>
+                            Finalized by Agent
+                          </span>
                         </div>
-                      );
-                    })}
+                      )}
+                    </div>
                   </div>
                 </div>
-              )}
+              ))}
             </div>
-          ))}
-        </div>
+            <div className="border-b mt-4 mb-4" style={{ borderColor: '#E5E7EB' }} />
+          </div>
+        )}
+        {loadingTables ? (
+          <div className="flex items-center justify-center py-8">
+            <Loader2 className="w-8 h-8 animate-spin" style={{ color: '#8E42EE' }} />
+          </div>
+        ) : (
+          <div className="space-y-3">
+            {tables.map(table => {
+              const fields = tableFields.get(table.table_name) || [];
+              const isLoadingFields = loadingFields.has(table.table_name);
+              const isExpanded = expandedTables.has(table.table_name);
+
+              return (
+                <div
+                  key={table.table_name}
+                  className="border rounded-lg overflow-hidden"
+                  style={{ borderColor: '#6B7280' }}
+                >
+                  <button
+                    onClick={() => toggleTable(table.table_name)}
+                    className="w-full flex items-center justify-between p-3 transition-colors bg-white hover:bg-gray-50"
+                  >
+                    <div className="flex items-center gap-2">
+                      {isExpanded ? (
+                        <ChevronDown className="w-5 h-5" style={{ color: '#111827' }} />
+                      ) : (
+                        <ChevronRight className="w-5 h-5" style={{ color: '#111827' }} />
+                      )}
+                      <span className="font-semibold text-sm" style={{ color: '#111827' }}>
+                        {table.table_name.replace(/_/g, ' ').replace(/\b\w/g, l => l.toUpperCase())}
+                      </span>
+                    </div>
+                    <span
+                      className="text-xs px-2 py-1 rounded"
+                      style={{ backgroundColor: '#6B728020', color: '#6B7280' }}
+                    >
+                      {table.field_count} fields
+                    </span>
+                  </button>
+
+                  {isExpanded && (
+                    <div className="border-t" style={{ borderColor: '#6B728040' }}>
+                      {isLoadingFields ? (
+                        <div className="flex items-center justify-center py-6">
+                          <Loader2 className="w-6 h-6 animate-spin" style={{ color: '#8E42EE' }} />
+                        </div>
+                      ) : (
+                        <div className="p-2 space-y-2">
+                          {fields.map(field => {
+                            const key = getFieldKey(table.table_name, field.field_name);
+                            const isFieldExpanded = expandedFields.has(key);
+
+                            return (
+                              <div
+                                key={key}
+                                className="border rounded overflow-hidden"
+                                style={{ borderColor: '#e5e7eb' }}
+                              >
+                                <button
+                                  onClick={() =>
+                                    toggleField(table.table_name, field.field_name, field.field_type)
+                                  }
+                                  className="w-full flex items-center justify-between p-2 transition-colors bg-white hover:bg-gray-50"
+                                >
+                                  <div className="flex items-center gap-2">
+                                    {isFieldExpanded ? (
+                                      <ChevronDown className="w-3 h-3" style={{ color: '#6B7280' }} />
+                                    ) : (
+                                      <ChevronRight className="w-3 h-3" style={{ color: '#6B7280' }} />
+                                    )}
+                                    <span className="font-medium text-sm" style={{ color: '#111827' }}>
+                                      {field.field_name.replace(/_/g, ' ').replace(/\b\w/g, l => l.toUpperCase())}
+                                    </span>
+                                  </div>
+                                  <span
+                                    className="text-xs px-1.5 py-0.5 rounded"
+                                    style={{ backgroundColor: '#6B728020', color: '#6B7280' }}
+                                  >
+                                    {field.field_type}
+                                  </span>
+                                </button>
+
+                                {isFieldExpanded && (
+                                  <div className="bg-gray-50 border-t p-3" style={{ borderColor: '#e5e7eb' }}>
+                                    {renderFieldInput(table.table_name, field.field_name, field.field_type)}
+                                  </div>
+                                )}
+                              </div>
+                            );
+                          })}
+                        </div>
+                      )}
+                    </div>
+                  )}
+                </div>
+              );
+            })}
+          </div>
+        )}
       </div>
     </div>
   );

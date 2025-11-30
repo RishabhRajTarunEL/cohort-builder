@@ -207,21 +207,45 @@ class DatabaseSchemaView(APIView):
             # Verify the project exists and belongs to the user
             project = get_object_or_404(CohortProject, id=project_id, user=request.user)
             
-            # Get the atlas_id from the project
-            atlas_id = project.atlas_id
+            # Validate atlas_id exists
+            if not project.atlas_id:
+                logger.warning(f"Project {project_id} has no atlas_id")
+                return Response(
+                    {'detail': 'Project has no atlas_id. Please ensure the atlas has been processed.'},
+                    status=status.HTTP_404_NOT_FOUND
+                )
             
-            # Try to load schema from GCS
+            # Try to get cached schema first (same approach as ProjectSchemaView)
+            from api.storage.atlas_file_cache import AtlasFileCache
+            
+            cache = AtlasFileCache(project.atlas_id)
+            cached_files = cache.get_cached_files()
+            
+            if cached_files and 'schema' in cached_files:
+                schema_data = cached_files['schema']
+                logger.info(f"Successfully loaded schema for project {project_id} from cache")
+                return Response(schema_data, status=status.HTTP_200_OK)
+            
+            # If not in cache, try to load from GCS and cache it
             try:
+                from api.storage.gcs_storage import get_gcs_storage
                 gcs = get_gcs_storage()
-                gcs_path = f"atlases/{atlas_id}/schema.json"
+                gcs_path = f"atlases/{project.atlas_id}/schema.json"
                 
                 # Download schema file from GCS
-                local_path = f"/tmp/db_schema_{atlas_id}.json"
+                local_path = f"/tmp/db_schema_{project.atlas_id}.json"
                 gcs.download_file(gcs_path, local_path)
                 
-                # Read and return the schema
+                # Read the schema
                 with open(local_path, 'r') as f:
                     schema_data = json.load(f)
+                
+                # Cache it for future use
+                try:
+                    cache.cache_files({'schema': schema_data})
+                    logger.info(f"Cached schema for atlas {project.atlas_id}")
+                except Exception as cache_error:
+                    logger.warning(f"Failed to cache schema: {cache_error}")
                 
                 # Clean up temp file
                 Path(local_path).unlink(missing_ok=True)
@@ -242,9 +266,9 @@ class DatabaseSchemaView(APIView):
                     logger.info(f"Successfully loaded schema for project {project_id} from local fallback")
                     return Response(schema_data, status=status.HTTP_200_OK)
                 else:
-                    logger.error(f"Schema file not found in GCS or locally for atlas {atlas_id}")
+                    logger.error(f"Schema file not found in cache, GCS, or locally for atlas {project.atlas_id}")
                     return Response(
-                        {'detail': 'Database schema not found. Please ensure the atlas has been processed.'},
+                        {'detail': 'Database schema not found. Please ensure the atlas has been processed and cached.'},
                         status=status.HTTP_404_NOT_FOUND
                     )
             

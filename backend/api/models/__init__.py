@@ -3,6 +3,7 @@ from .user import UserProfile
 from .cohort import Cohort, Filter, QueryHistory
 from .project import CohortProject, ChatSession, ChatMessage
 from .task import AtlasProcessingTask
+from .field_mapping import FieldMapping
 
 __all__ = [
     'UserProfile',
@@ -13,4 +14,5 @@ __all__ = [
     'ChatSession',
     'ChatMessage',
     'AtlasProcessingTask',
+    'FieldMapping',
 ]

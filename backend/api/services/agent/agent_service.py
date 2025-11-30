@@ -48,6 +48,12 @@ class AgentService:
         self.concept_lookup = None
         self.db_path = None
         
+        # Pre-computed embedding matrix (memory optimization)
+        # Avoids recreating numpy array on every mapping call
+        self._concept_keys = None  # List of concept strings
+        self._concept_matrix = None  # Pre-computed numpy matrix
+        self._concept_to_idx = None  # Reverse lookup: concept -> index
+        
         self._load_atlas_files()
     
     def _load_atlas_files(self):
@@ -70,12 +76,35 @@ class AgentService:
                 self.db_path = cached_data.get('db_path')
                 self.temp_dir = cached_data.get('temp_dir')
                 
+                # Check if pre-computed matrix is already cached
+                self._concept_keys = cached_data.get('_concept_keys')
+                self._concept_matrix = cached_data.get('_concept_matrix')
+                self._concept_to_idx = cached_data.get('_concept_to_idx')
+                
+                # If matrix not cached, pre-compute it and update cache
+                if self._concept_matrix is None and self.concept_lookup:
+                    self._precompute_concept_matrix()
+                    # Update the in-memory cache with the matrix
+                    cached_data['_concept_keys'] = self._concept_keys
+                    cached_data['_concept_matrix'] = self._concept_matrix
+                    cached_data['_concept_to_idx'] = self._concept_to_idx
+                    # Clear concept_lookup from cache to save memory
+                    cached_data['concept_lookup'] = None
+                    logger.info("Added pre-computed matrix to cache, cleared concept_lookup")
+                elif self._concept_matrix is not None:
+                    # Rebuild _concept_to_idx if not cached
+                    if self._concept_to_idx is None and self._concept_keys:
+                        self._concept_to_idx = {k: i for i, k in enumerate(self._concept_keys)}
+                    # Clear concept_lookup since we have the matrix
+                    self.concept_lookup = None
+                    logger.info(f"Using cached concept matrix: {self._concept_matrix.shape}")
+                
                 elapsed = time.time() - start_time
                 logger.info(f"✓ Loaded atlas files from cache in {elapsed:.2f}s")
                 return
             
-            # Cache miss - download from GCS
-            logger.info(f"Cache miss - downloading atlas files from GCS...")
+            # Cache miss - need to download from GCS (this is slow, ~60s)
+            logger.info(f"🌐 Cache MISS - downloading atlas files from GCS (this only happens once)...")
             gcs = get_gcs_storage()
             
             # Create temp directory for downloads
@@ -113,16 +142,27 @@ class AgentService:
             self.concept_df = pd.read_csv(local_concept)
             logger.info(f"Loaded concept table with {len(self.concept_df)} concepts")
             
-            # Load concept_embeddings.pkl
+            # Load concept_embeddings.pkl - MEMORY OPTIMIZED
+            # Load directly into numpy array, skip creating intermediate dict
             embeddings_pkl_path = f"atlases/{self.atlas_id}/concept_embeddings.pkl"
             local_embeddings_pkl = Path(self.temp_dir) / "concept_embeddings.pkl"
             gcs.download_file(embeddings_pkl_path, str(local_embeddings_pkl))
+            
             with open(local_embeddings_pkl, 'rb') as f:
                 data = pickle.load(f)
-                concepts = data.get('concepts', [])
-                embeddings = data.get('embeddings', [])
-                self.concept_lookup = dict(zip(concepts, embeddings))
-            logger.info(f"Loaded concept embeddings for {len(self.concept_lookup)} concepts")
+                self._concept_keys = data.get('concepts', [])
+                embeddings_list = data.get('embeddings', [])
+                # Create numpy array directly (skip dict creation to save ~600MB)
+                self._concept_matrix = np.array(embeddings_list, dtype=np.float32)
+                self._concept_to_idx = {k: i for i, k in enumerate(self._concept_keys)}
+                # Don't create concept_lookup - we don't need it
+                self.concept_lookup = None
+                # Free the list immediately
+                del embeddings_list
+                del data
+            
+            matrix_mb = self._concept_matrix.nbytes / 1024 / 1024
+            logger.info(f"Loaded concept embeddings: {len(self._concept_keys)} concepts, matrix {self._concept_matrix.shape} ({matrix_mb:.1f} MB)")
             
             # Download SQLite database (for query execution)
             db_files = gcs.list_files(f"atlases/{self.atlas_id}/")
@@ -136,21 +176,60 @@ class AgentService:
             elapsed = time.time() - start_time
             logger.info(f"Downloaded atlas files from GCS in {elapsed:.2f}s")
             
-            # Cache the files for future use
+            # NOTE: concept matrix is already created during loading above
+            # No need to call _precompute_concept_matrix()
+            
+            # Cache the files for future use (including pre-computed matrix for in-memory cache)
+            # NOTE: concept_lookup is NOT cached - we use matrix directly to save ~600MB
             file_data = {
                 'schema': self.schema,
                 'schema_embeddings': self.schema_embeddings,
                 'schema_keys': self.schema_keys,
                 'concept_df': self.concept_df,
-                'concept_lookup': self.concept_lookup,
+                'concept_lookup': None,  # Not used - saves ~600MB
                 'db_path': self.db_path,
-                'temp_dir': self.temp_dir
+                'temp_dir': self.temp_dir,
+                '_concept_keys': self._concept_keys,
+                '_concept_matrix': self._concept_matrix,
+                '_concept_to_idx': self._concept_to_idx,
             }
             file_cache.cache_files(file_data)
             
         except Exception as e:
             logger.error(f"Failed to load atlas files: {e}")
             raise Exception(f"Failed to initialize agent: {e}")
+    
+    def _precompute_concept_matrix(self):
+        """
+        Pre-compute the concept embedding matrix to avoid repeated array creation.
+        This is a MAJOR memory optimization - without this, every call to
+        _map_entity_value_mapping creates a new ~600MB numpy array.
+        
+        MEMORY OPTIMIZATION: After creating the matrix, we clear concept_lookup
+        to free ~600MB of memory. We keep only the matrix and keys.
+        """
+        if self.concept_lookup:
+            try:
+                self._concept_keys = list(self.concept_lookup.keys())
+                self._concept_matrix = np.array(list(self.concept_lookup.values()), dtype=np.float32)
+                
+                matrix_mb = self._concept_matrix.nbytes / 1024 / 1024
+                logger.info(f"Pre-computed concept matrix: {self._concept_matrix.shape} ({matrix_mb:.1f} MB)")
+                
+                # Create a reverse lookup for concept -> index (much smaller than full embeddings)
+                self._concept_to_idx = {k: i for i, k in enumerate(self._concept_keys)}
+                
+                # CRITICAL MEMORY OPTIMIZATION: Clear the concept_lookup dict
+                # We can reconstruct any lookup using _concept_keys and _concept_matrix
+                # This saves ~600MB of memory!
+                self.concept_lookup = None
+                logger.info(f"Cleared concept_lookup dict to save memory")
+                
+            except Exception as e:
+                logger.warning(f"Failed to pre-compute concept matrix: {e}")
+                self._concept_keys = None
+                self._concept_matrix = None
+                self._concept_to_idx = None
     
     def cleanup(self):
         """Cleanup temporary files (but keep cached files)"""
@@ -169,6 +248,68 @@ class AgentService:
                     logger.info(f"Keeping cached directory: {self.temp_dir}")
         except Exception as e:
             logger.warning(f"Failed to cleanup temp directory: {e}")
+    
+    def validate_schema_vs_database(self) -> Dict[str, Any]:
+        """
+        Compare schema.json tables/columns against actual SQLite database.
+        Returns a dict with mismatches and suggestions.
+        """
+        if not self.db_path or not Path(self.db_path).exists():
+            return {"error": "Database not found"}
+        
+        if not self.schema:
+            return {"error": "Schema not loaded"}
+        
+        try:
+            conn = sqlite3.connect(self.db_path)
+            cursor = conn.cursor()
+            
+            # Get actual tables
+            cursor.execute("SELECT name FROM sqlite_master WHERE type='table'")
+            db_tables = set(row[0] for row in cursor.fetchall())
+            
+            # Get schema tables
+            schema_tables = set(self.schema.keys())
+            
+            # Find mismatches
+            missing_in_db = schema_tables - db_tables
+            extra_in_db = db_tables - schema_tables
+            
+            # Check columns for matching tables
+            column_mismatches = {}
+            for table in schema_tables & db_tables:
+                cursor.execute(f"PRAGMA table_info('{table}')")
+                db_columns = set(row[1] for row in cursor.fetchall())
+                schema_columns = set(self.schema[table].get('fields', {}).keys())
+                
+                missing_cols = schema_columns - db_columns
+                extra_cols = db_columns - schema_columns
+                
+                if missing_cols or extra_cols:
+                    column_mismatches[table] = {
+                        "in_schema_not_db": list(missing_cols),
+                        "in_db_not_schema": list(extra_cols)
+                    }
+            
+            conn.close()
+            
+            result = {
+                "schema_tables": list(schema_tables),
+                "db_tables": list(db_tables),
+                "tables_in_schema_not_db": list(missing_in_db),
+                "tables_in_db_not_schema": list(extra_in_db),
+                "column_mismatches": column_mismatches,
+                "is_valid": len(missing_in_db) == 0 and len(column_mismatches) == 0
+            }
+            
+            if not result["is_valid"]:
+                logger.warning(f"Schema mismatch detected: {result}")
+            
+            return result
+            
+        except Exception as e:
+            logger.error(f"Error validating schema: {e}")
+            return {"error": str(e)}
     
     # -------------------------
     # Stage 0: Extract Raw Criteria
@@ -626,24 +767,28 @@ Available fields in {table}:
         """
         Method 3: Direct concept value mapping
         Embed entity → find similar concept values → get parent table.field
+        
+        Uses pre-computed concept matrix to avoid OOM errors from repeated
+        numpy array allocation.
         """
         try:
-            if not self.concept_df is not None or not self.concept_lookup:
+            if self.concept_df is None:
+                return {"ranked_matches": []}
+            
+            # Use pre-computed matrix (memory optimization - no fallback needed)
+            if self._concept_matrix is None or self._concept_keys is None:
+                logger.warning("Concept matrix not available for value mapping")
                 return {"ranked_matches": []}
             
             entity_emb = self._get_embedding(f"{attribute} {entity}")
-            query_vec = np.array(entity_emb).reshape(1, -1)
+            query_vec = np.array(entity_emb, dtype=np.float32).reshape(1, -1)
             
-            # Get all concept embeddings
-            concepts = list(self.concept_lookup.keys())
-            emb_matrix = np.array(list(self.concept_lookup.values()))
-            
-            # Cosine similarity
-            sims = cosine_similarity(query_vec, emb_matrix)[0]
+            # Cosine similarity with pre-computed matrix (no new allocation!)
+            sims = cosine_similarity(query_vec, self._concept_matrix)[0]
             top_idxs = np.argsort(sims)[::-1][:5]
             
             # Get top matching concepts
-            top_concepts = [concepts[i] for i in top_idxs]
+            top_concepts = [self._concept_keys[i] for i in top_idxs]
             
             # Retrieve corresponding table.field
             filter_rows = self.concept_df[
@@ -722,28 +867,34 @@ Available fields in {table}:
             
             # Large set (> 50): Use semantic search for speed and scalability
             logger.info(f"Using semantic search for {num_unique} concepts")
+            
+            if self._concept_matrix is None or self._concept_to_idx is None:
+                logger.warning("Concept matrix not available for semantic search")
+                return None
+            
             entity_emb = self._get_embedding(entity)
             subset_ctx = subset_unique['concept_with_context'].tolist()
             
-            # Build embedding matrix from available concepts
-            valid_embs = []
-            valid_indices = []
+            # Build embedding matrix from available concepts using pre-computed matrix
+            valid_matrix_indices = []
+            valid_df_indices = []
             for i, ctx in enumerate(subset_ctx):
-                if ctx in self.concept_lookup:
-                    valid_embs.append(self.concept_lookup[ctx])
-                    valid_indices.append(i)
+                if ctx in self._concept_to_idx:
+                    valid_matrix_indices.append(self._concept_to_idx[ctx])
+                    valid_df_indices.append(i)
             
-            if len(valid_embs) == 0:
+            if len(valid_matrix_indices) == 0:
                 logger.warning(f"No embeddings found for concepts in {table}.{field}")
                 return None
             
-            subset_embs = np.vstack(valid_embs)
-            query_vec = np.array(entity_emb).reshape(1, -1)
+            # Extract subset of embeddings from pre-computed matrix (no new large allocation)
+            subset_embs = self._concept_matrix[valid_matrix_indices]
+            query_vec = np.array(entity_emb, dtype=np.float32).reshape(1, -1)
             sims = cosine_similarity(query_vec, subset_embs)[0]
             
             # Get top 5 matches
             best_idxs = sims.argsort()[::-1][:5]
-            results = [subset_unique.iloc[valid_indices[i]]['concept_name'] for i in best_idxs]
+            results = [subset_unique.iloc[valid_df_indices[i]]['concept_name'] for i in best_idxs]
             logger.info(f"Semantic search found: {results}")
             return results
             
@@ -918,7 +1069,7 @@ Available fields in {table}:
         return criteria
     
     def _validate_criteria(self, criteria: List[Dict]) -> Dict:
-        """Validate SQL expressions against schema"""
+        """Validate SQL expressions against schema AND actual database"""
         errors = []
         warnings = []
         
@@ -936,12 +1087,47 @@ Available fields in {table}:
                 
                 for table, field in fields:
                     if table not in self.schema:
-                        errors.append(f"Table '{table}' not found in schema")
+                        # Check available tables for suggestions
+                        available = list(self.schema.keys())[:5]
+                        errors.append(f"Table '{table}' not found in schema. Available: {available}")
                     elif field not in self.schema[table].get('fields', {}):
-                        errors.append(f"Field '{field}' not found in table '{table}'")
+                        # Check available fields for suggestions
+                        available = list(self.schema[table].get('fields', {}).keys())[:10]
+                        errors.append(f"Field '{field}' not found in table '{table}'. Available: {available}")
                         
             except Exception as e:
                 warnings.append(f"Could not validate: {sql_expr}")
+        
+        # Also validate against actual database if available
+        if self.db_path and Path(self.db_path).exists() and len(errors) == 0:
+            try:
+                conn = sqlite3.connect(self.db_path)
+                cursor = conn.cursor()
+                
+                for criterion in criteria:
+                    sql_expr = criterion.get('sql_expression')
+                    if not sql_expr:
+                        continue
+                    
+                    import re
+                    fields = re.findall(r'(\w+)\.(\w+)', sql_expr)
+                    
+                    for table, field in fields:
+                        # Check actual database
+                        cursor.execute("SELECT name FROM sqlite_master WHERE type='table' AND name=?", (table,))
+                        if not cursor.fetchone():
+                            cursor.execute("SELECT name FROM sqlite_master WHERE type='table'")
+                            all_tables = [row[0] for row in cursor.fetchall()]
+                            errors.append(f"Table '{table}' not in database. Available: {all_tables[:5]}")
+                        else:
+                            cursor.execute(f"PRAGMA table_info({table})")
+                            columns = [row[1] for row in cursor.fetchall()]
+                            if field not in columns:
+                                errors.append(f"Column '{field}' not in '{table}'. Available: {columns[:10]}")
+                
+                conn.close()
+            except Exception as e:
+                warnings.append(f"Could not validate against database: {e}")
         
         return {
             "valid": len(errors) == 0,
@@ -1160,6 +1346,44 @@ Available fields in {table}:
             conn = sqlite3.connect(self.db_path)
             conn.row_factory = sqlite3.Row  # Enable column names
             cursor = conn.cursor()
+            
+            # Validate table.field references against actual database schema
+            fields_in_query = re.findall(r'(\w+)\.(\w+)', sql_query)
+            logger.info(f"Validating {len(fields_in_query)} table.field references in SQL")
+            
+            # Get all tables first
+            cursor.execute("SELECT name FROM sqlite_master WHERE type='table'")
+            all_tables = [row[0] for row in cursor.fetchall()]
+            all_tables_lower = {t.lower(): t for t in all_tables}
+            logger.info(f"Database has {len(all_tables)} tables: {all_tables[:10]}")
+            
+            for table, field in fields_in_query:
+                # Check if table exists (case-insensitive)
+                if table not in all_tables:
+                    if table.lower() in all_tables_lower:
+                        # Case mismatch - suggest correct case
+                        correct_table = all_tables_lower[table.lower()]
+                        raise Exception(f"Table '{table}' has wrong case. Use '{correct_table}' instead.")
+                    else:
+                        similar = [t for t in all_tables if table.lower() in t.lower() or t.lower() in table.lower()]
+                        suggestion = f" Similar: {similar}" if similar else f" Available: {all_tables[:10]}"
+                        raise Exception(f"Table '{table}' not found.{suggestion}")
+                
+                # Check if column exists (case-insensitive)
+                cursor.execute(f"PRAGMA table_info('{table}')")
+                columns = [row[1] for row in cursor.fetchall()]
+                columns_lower = {c.lower(): c for c in columns}
+                logger.info(f"Table '{table}' has {len(columns)} columns: {columns[:10]}")
+                
+                if field not in columns:
+                    if field.lower() in columns_lower:
+                        # Case mismatch
+                        correct_col = columns_lower[field.lower()]
+                        raise Exception(f"Column '{field}' has wrong case in table '{table}'. Use '{correct_col}' instead.")
+                    else:
+                        similar_cols = [c for c in columns if field.lower() in c.lower() or c.lower() in field.lower()]
+                        suggestion = f" Similar: {similar_cols}" if similar_cols else f" Available: {columns}"
+                        raise Exception(f"Column '{field}' not in table '{table}'.{suggestion}")
             
             cursor.execute(sql_query)
             rows = cursor.fetchall()

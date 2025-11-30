@@ -23,4 +23,11 @@ RUN python manage.py collectstatic --noinput
 
 EXPOSE 8000
 
-CMD ["gunicorn", "cohort_backend.wsgi:application", "--bind", "0.0.0.0:8000", "--workers", "4"]
+# Memory optimization:
+# - --workers 1: Single worker to minimize memory (use threads for concurrency)
+# - --threads 4: Use threads instead of processes for concurrency
+# - --timeout 300: Increased for initial file loading (can take time)
+# - --max-requests 200: Recycle worker to prevent memory leaks
+# - --max-requests-jitter 20: Add jitter to recycling
+# Note: With 1 worker, we avoid duplicating large data structures in memory
+CMD ["gunicorn", "cohort_backend.wsgi:application", "--bind", "0.0.0.0:8000", "--workers", "1", "--threads", "4", "--timeout", "300", "--max-requests", "200", "--max-requests-jitter", "20"]

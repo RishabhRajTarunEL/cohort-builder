@@ -1,7 +1,7 @@
 'use client';
 
 import React, { useState, useEffect } from 'react';
-import { ChevronDown, ChevronRight, Database, Table, AlertCircle } from 'lucide-react';
+import { ChevronDown, ChevronRight, Database, Table, AlertCircle, Loader2 } from 'lucide-react';
 import { convertSchemaToTables } from '@/app/lib/schemaHelper';
 import api from '@/app/lib/api';
 import Tag from '@/app/components/ui/Tag';
@@ -28,14 +28,52 @@ export default function DatabaseExplorer({ projectId }: DatabaseExplorerProps) {
   const [expandedTables, setExpandedTables] = useState<Set<string>>(new Set());
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [isCacheReady, setIsCacheReady] = useState(false);
+  const [checkingCache, setCheckingCache] = useState(true);
 
   useEffect(() => {
     if (projectId) {
-      loadDatabaseSchemaFromAPI();
+      checkCacheAndLoadSchema();
     } else {
       loadDatabaseSchemaFromLocal();
     }
   }, [projectId]);
+
+  const checkCacheAndLoadSchema = async () => {
+    setCheckingCache(true);
+    setError(null);
+    
+    try {
+      // Check cache status first
+      const cacheResponse = await fetch(
+        `${process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000/api'}/cohort-projects/${projectId}/cache-status`,
+        { credentials: 'include' }
+      );
+      
+      if (cacheResponse.ok) {
+        const cacheData = await cacheResponse.json();
+        if (cacheData.is_ready) {
+          setIsCacheReady(true);
+          setCheckingCache(false);
+          // Cache is ready, load schema
+          await loadDatabaseSchemaFromAPI();
+        } else {
+          // Cache not ready yet, but try loading anyway (backend will handle fallback)
+          setCheckingCache(false);
+          await loadDatabaseSchemaFromAPI();
+        }
+      } else {
+        // Cache check failed, try loading anyway
+        setCheckingCache(false);
+        await loadDatabaseSchemaFromAPI();
+      }
+    } catch (error) {
+      console.error('Cache check failed:', error);
+      setCheckingCache(false);
+      // Try loading anyway
+      await loadDatabaseSchemaFromAPI();
+    }
+  };
 
   const loadDatabaseSchemaFromAPI = async () => {
     try {
@@ -48,12 +86,15 @@ export default function DatabaseExplorer({ projectId }: DatabaseExplorerProps) {
       // Convert schema to tables format
       const schemaToTables = convertSchemaToTablesFromData(schemaData);
       setTables(schemaToTables);
-    } catch (error) {
+    } catch (error: any) {
       console.error('Error loading database schema from API:', error);
-      setError('Failed to load database schema');
+      const errorMessage = error?.message || 'Failed to load database schema';
+      setError(errorMessage);
       
-      // Fallback to local schema
-      loadDatabaseSchemaFromLocal();
+      // Fallback to local schema if API fails
+      if (errorMessage.includes('not found') || errorMessage.includes('404')) {
+        loadDatabaseSchemaFromLocal();
+      }
     } finally {
       setLoading(false);
     }
@@ -130,18 +171,6 @@ export default function DatabaseExplorer({ projectId }: DatabaseExplorerProps) {
     });
   };
 
-  if (loading) {
-    return (
-      <div className="p-4">
-        <div className="animate-pulse space-y-4">
-          <div className="h-4 bg-gray-200 rounded w-3/4"></div>
-          <div className="h-4 bg-gray-200 rounded w-1/2"></div>
-          <div className="h-4 bg-gray-200 rounded w-2/3"></div>
-        </div>
-      </div>
-    );
-  }
-
   return (
     <div className="flex flex-col h-full">
       {/* Header */}
@@ -152,9 +181,15 @@ export default function DatabaseExplorer({ projectId }: DatabaseExplorerProps) {
             Database Schema
           </h2>
         </div>
-        <p className="text-xs mt-1" style={{ color: '#6B7280' }}>
-          {tables.length} tables available
-        </p>
+        {checkingCache || loading ? (
+          <p className="text-xs mt-1" style={{ color: '#6B7280' }}>
+            {checkingCache ? 'Checking cache...' : 'Loading schema...'}
+          </p>
+        ) : (
+          <p className="text-xs mt-1" style={{ color: '#6B7280' }}>
+            {tables.length} tables available
+          </p>
+        )}
         {error && (
           <div className="mt-2 flex items-center gap-2 text-xs" style={{ color: '#FF004D' }}>
             <AlertCircle className="w-3 h-3" />
@@ -165,7 +200,12 @@ export default function DatabaseExplorer({ projectId }: DatabaseExplorerProps) {
 
       {/* Tables List */}
       <div className="flex-1 overflow-y-auto p-4">
-        <div className="space-y-2">
+        {checkingCache || loading ? (
+          <div className="flex items-center justify-center py-8">
+            <Loader2 className="w-8 h-8 animate-spin" style={{ color: '#8E42EE' }} />
+          </div>
+        ) : (
+          <div className="space-y-2">
           {tables.map((table: any) => (
             <div
               key={table.name}
@@ -250,7 +290,8 @@ export default function DatabaseExplorer({ projectId }: DatabaseExplorerProps) {
               )}
             </div>
           ))}
-        </div>
+          </div>
+        )}
       </div>
     </div>
   );

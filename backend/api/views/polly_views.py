@@ -389,3 +389,115 @@ class UploadDataDictionaryView(APIView):
                 {'detail': f'Failed to upload file: {str(e)}'},
                 status=status.HTTP_500_INTERNAL_SERVER_ERROR
             )
+
+
+class UploadSchemaKeysView(APIView):
+    """
+    Upload schema_keys.json file to GCS bucket.
+    
+    This file defines primary keys and foreign key relationships between tables.
+    Format:
+    {
+        "table_name": {
+            "pk": "primary_key_column",
+            "fks": {
+                "foreign_key_column": "referenced_table"
+            }
+        }
+    }
+    """
+    permission_classes = (IsAuthenticated,)
+    parser_classes = (MultiPartParser, FormParser)
+    
+    def post(self, request):
+        """Upload schema_keys.json to GCS"""
+        try:
+            file = request.FILES.get('file')
+            atlas_id = request.data.get('atlas_id')
+            
+            if not file:
+                return Response(
+                    {'detail': 'No file provided'},
+                    status=status.HTTP_400_BAD_REQUEST
+                )
+            
+            if not atlas_id:
+                return Response(
+                    {'detail': 'Atlas ID is required'},
+                    status=status.HTTP_400_BAD_REQUEST
+                )
+            
+            # Validate file is JSON
+            if not file.name.endswith('.json'):
+                return Response(
+                    {'detail': 'File must be a JSON file'},
+                    status=status.HTTP_400_BAD_REQUEST
+                )
+            
+            # Validate JSON structure
+            try:
+                import json
+                content = file.read()
+                schema_keys = json.loads(content)
+                
+                # Basic validation - should be a dict with table names
+                if not isinstance(schema_keys, dict):
+                    return Response(
+                        {'detail': 'Invalid format: schema_keys must be a JSON object'},
+                        status=status.HTTP_400_BAD_REQUEST
+                    )
+                
+                # Validate each table entry
+                for table_name, table_data in schema_keys.items():
+                    if not isinstance(table_data, dict):
+                        return Response(
+                            {'detail': f'Invalid format for table "{table_name}": must be an object'},
+                            status=status.HTTP_400_BAD_REQUEST
+                        )
+                    if 'pk' not in table_data:
+                        return Response(
+                            {'detail': f'Missing "pk" field for table "{table_name}"'},
+                            status=status.HTTP_400_BAD_REQUEST
+                        )
+                
+                # Reset file position for upload
+                file.seek(0)
+                
+            except json.JSONDecodeError as e:
+                return Response(
+                    {'detail': f'Invalid JSON: {str(e)}'},
+                    status=status.HTTP_400_BAD_REQUEST
+                )
+            
+            logger.info(f"Uploading schema_keys.json for atlas {atlas_id}, {len(schema_keys)} tables")
+            
+            # Initialize GCS client
+            storage_client = storage.Client(project=settings.GCS_PROJECT_ID)
+            bucket = storage_client.bucket(settings.GCS_BUCKET_NAME)
+            
+            # Create blob path: atlases/{atlas_id}/schema_keys.json
+            blob_path = f"atlases/{atlas_id}/schema_keys.json"
+            blob = bucket.blob(blob_path)
+            
+            # Upload file
+            blob.upload_from_file(file, content_type='application/json')
+            
+            # Clear the cache so new schema_keys is used
+            from api.storage.atlas_file_cache import AtlasFileCache
+            AtlasFileCache.clear_cache(atlas_id)
+            
+            logger.info(f"Successfully uploaded schema_keys.json to gs://{settings.GCS_BUCKET_NAME}/{blob_path}")
+            
+            return Response({
+                'message': 'Schema keys uploaded successfully',
+                'gcs_path': f"gs://{settings.GCS_BUCKET_NAME}/{blob_path}",
+                'atlas_id': atlas_id,
+                'tables_count': len(schema_keys)
+            }, status=status.HTTP_201_CREATED)
+            
+        except Exception as e:
+            logger.error(f"Failed to upload schema_keys.json: {str(e)}", exc_info=True)
+            return Response(
+                {'detail': f'Failed to upload file: {str(e)}'},
+                status=status.HTTP_500_INTERNAL_SERVER_ERROR
+            )

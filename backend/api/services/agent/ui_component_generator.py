@@ -52,6 +52,9 @@ def generate_ui_components(
                 concept_df, table, field
             )
             
+            # Get mapped_concept (pre-selected values from agent)
+            mapped_concept = mapping.get('mapped_concept')
+            
             # Determine appropriate component
             component = _determine_component_type(
                 data_type=data_type,
@@ -59,7 +62,8 @@ def generate_ui_components(
                 field_info=field_info,
                 unique_values=unique_values,
                 entity=entity,
-                table_field=table_field
+                table_field=table_field,
+                mapped_concept=mapped_concept
             )
             
             mapping['ui_component'] = component
@@ -92,7 +96,8 @@ def _determine_component_type(
     field_info: Dict,
     unique_values: List[str],
     entity: str,
-    table_field: str
+    table_field: str,
+    mapped_concept: Optional[List[str]] = None
 ) -> Dict[str, Any]:
     """
     Decision tree for component selection based on data type and cardinality.
@@ -106,6 +111,9 @@ def _determine_component_type(
     - Categorical (9-20 values): Dropdown
     - Categorical (21-50 values): MultiSelect
     - Categorical (50+ values): Autocomplete
+    
+    Args:
+        mapped_concept: Pre-selected values from the agent (used to pre-check checkboxes)
     """
     data_type_lower = data_type.lower()
     
@@ -130,9 +138,9 @@ def _determine_component_type(
     # < 10 items: show checkboxes
     # >= 10 items: show autocomplete with checkboxes
     if cardinality < 10:
-        return _generate_checkbox_list_component(field_info, unique_values, table_field)
+        return _generate_checkbox_list_component(field_info, unique_values, table_field, mapped_concept)
     else:
-        return _generate_autocomplete_component(field_info, unique_values, table_field)
+        return _generate_autocomplete_component(field_info, unique_values, table_field, mapped_concept)
 
 
 def _parse_entity_comparison(entity: str) -> Tuple[str, Any]:
@@ -389,11 +397,31 @@ def _generate_multiselect_component(
 def _generate_autocomplete_component(
     field_info: Dict,
     unique_values: List[str],
-    table_field: str
+    table_field: str,
+    mapped_concept: Optional[List[str]] = None
 ) -> Dict[str, Any]:
-    """Generate Autocomplete configuration for high cardinality fields"""
+    """Generate Autocomplete configuration for high cardinality fields
+    
+    Args:
+        mapped_concept: Pre-selected values from the agent
+    """
     # Show top 10 most common as suggestions
     popular_values = unique_values[:10]
+    
+    # Use mapped_concept as pre-selected values if available
+    selected_values = []
+    if mapped_concept:
+        # Filter to only valid values with case-insensitive matching
+        valid_values = set(unique_values)
+        valid_values_lower = {v.lower(): v for v in valid_values}
+        
+        for concept in mapped_concept:
+            if concept in valid_values:
+                selected_values.append(concept)
+            elif concept.lower() in valid_values_lower:
+                selected_values.append(valid_values_lower[concept.lower()])
+        
+        logger.info(f"Pre-selecting autocomplete values for {table_field}: mapped_concept={mapped_concept}, selected={selected_values}")
     
     return {
         "type": "autocomplete",
@@ -401,7 +429,8 @@ def _generate_autocomplete_component(
             "field": table_field,
             "label": table_field,
             "data_type": "string",
-            "current_value": "",
+            "current_value": selected_values[0] if selected_values else "",
+            "selected_values": selected_values,  # Pre-selected values from agent
             "placeholder": f"Type to search {field_info.get('field_description', 'values')}...",
             "min_search_length": 2,
             "max_results": 10,
@@ -514,11 +543,40 @@ def _generate_toggle_component(
 def _generate_checkbox_list_component(
     field_info: Dict,
     unique_values: List[str],
-    table_field: str
+    table_field: str,
+    mapped_concept: Optional[List[str]] = None
 ) -> Dict[str, Any]:
-    """Generate Checkbox List configuration for low cardinality fields"""
+    """Generate Checkbox List configuration for low cardinality fields
+    
+    Args:
+        mapped_concept: Pre-selected values from the agent to pre-check in the UI
+    """
+    # Build a set of values to include in options
+    # Start with unique values, but prioritize mapped_concepts
+    values_to_show = list(unique_values[:8])  # Default: first 8 values
+    
+    # If we have mapped concepts, ensure they are included in options
+    if mapped_concept:
+        # Create case-insensitive lookup for unique_values
+        unique_values_lower = {v.lower(): v for v in unique_values}
+        
+        for concept in mapped_concept:
+            # Find the actual value (with correct casing)
+            actual_value = None
+            if concept in unique_values:
+                actual_value = concept
+            elif concept.lower() in unique_values_lower:
+                actual_value = unique_values_lower[concept.lower()]
+            
+            # Add to values_to_show if not already present
+            if actual_value and actual_value not in values_to_show:
+                values_to_show.insert(0, actual_value)  # Prioritize at top
+        
+        # Trim back to 8 if needed
+        values_to_show = values_to_show[:8]
+    
     options = []
-    for value in unique_values[:8]:  # Max 8 values
+    for value in values_to_show:
         options.append({
             "value": value,
             "label": value,
@@ -526,13 +584,32 @@ def _generate_checkbox_list_component(
             "disabled": False
         })
     
+    # Use mapped_concept as pre-selected values if available
+    selected_values = []
+    if mapped_concept:
+        # mapped_concept can be a list of concepts - filter to only those in options
+        # Use case-insensitive matching since agent might return different casing
+        option_values = {opt["value"] for opt in options}
+        option_values_lower = {v.lower(): v for v in option_values}
+        
+        for concept in mapped_concept:
+            # Try exact match first
+            if concept in option_values:
+                selected_values.append(concept)
+            # Then try case-insensitive match
+            elif concept.lower() in option_values_lower:
+                selected_values.append(option_values_lower[concept.lower()])
+        
+        logger.info(f"Pre-selecting values for {table_field}: mapped_concept={mapped_concept}, options={list(option_values)}, selected={selected_values}")
+    
     return {
         "type": "checkbox_list",
         "config": {
             "field": table_field,
             "label": table_field,
             "data_type": "string",
-            "current_values": [],
+            "selected_values": selected_values,  # Pre-selected values from agent
+            "current_values": selected_values,   # Keep for backwards compatibility
             "layout": "vertical",
             "allow_select_all": True,
             "min_selections": 0,

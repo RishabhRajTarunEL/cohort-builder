@@ -214,7 +214,7 @@ TASK: Analyze the recent conversation history and current state, then decide on 
 
 <USER_INPUT_TYPES>
 - Initial cohort query (e.g., "Find patients with diabetes")
-- Approval to proceed (e.g., "yes", "looks good", "proceed", "next", "generate SQL")
+- Approval to proceed (e.g., "yes", "looks good", "proceed", "next", "continue", "ok", "generate SQL")
 - Feedback/edits (e.g., "change age to 50-60", "add hypertension", "remove smoking status")
 - Clarifying comment on earlier query
 - Irrelevant input unrelated to cohort building
@@ -249,7 +249,7 @@ IMPORTANT RULES:
 2. If user asks about DATABASE SCHEMA/STRUCTURE ("what tables", "what fields", "what data is available", "describe the database", "what can I query", "show me the schema") -> action is "db_question"
 3. If user asks to VIEW/DISPLAY criteria ("show criteria", "what are the criteria", "display criteria", "see criteria", "what do we have", "what's the current criteria", "i want to see the criteria") -> action is "clarify" with question explaining the criteria
 4. If user wants to UNDO/REVERT ("undo", "go back", "revert", "undo that", "go back to previous") -> action is "undo"
-5. ONLY advance if user EXPLICITLY approves: "yes", "looks good", "proceed", "correct", "approve"
+5. ONLY advance if user EXPLICITLY approves: "yes", "looks good", "proceed", "correct", "approve", "continue", "ok", "okay", "next"
 6. If at stage 1 and user says "generate SQL", "create query", "build query" -> action is "advance"
 7. If at stage 2 (SQL shown) and user says "run it", "execute", "yes" -> action is "advance"
 8. If user provides ANY modifications ("change X", "add Y", "remove Z") -> action is "edit"
@@ -476,7 +476,11 @@ Response (strict JSON):"""
             }
         
         elif self.state.current_stage == 2:
-            # User approved values, move to stage 3 (SQL generation) 
+            # User approved values, move to stage 3 (SQL generation)
+            # First, sync criteria with field mappings database
+            logger.info("Syncing agent-finalized criteria with field mappings database")
+            self.sync_criteria_with_field_mappings()
+            
             result = self.agent.process_stage_2(self.state.criteria)
             
             self.state.sql_query = result.get('sql_query')
@@ -1242,6 +1246,154 @@ Keep the response conversational and helpful."""
                 }
             }
     
+    def get_field_mappings_from_db(self) -> List[Dict[str, Any]]:
+        """
+        Retrieve field mappings from database for this project.
+        Used to pre-populate agent state with user-created filters.
+        
+        Returns:
+            List of field mapping dictionaries
+        """
+        from api.models import FieldMapping
+        
+        try:
+            mappings = FieldMapping.objects.filter(
+                cohort_project_id=self.project_id
+            ).order_by('-created_at')
+            
+            return [m.to_filter_dict() for m in mappings]
+        except Exception as e:
+            logger.error(f"Error retrieving field mappings: {e}", exc_info=True)
+            return []
+    
+    def save_field_mapping_to_db(
+        self,
+        table_name: str,
+        field_name: str,
+        field_type: str,
+        concept: str,
+        operator: str,
+        value: Any,
+        sql_criterion: str,
+        display_text: str,
+        source: str = 'agent',
+        status: str = 'agent_confirmed'
+    ) -> Optional[str]:
+        """
+        Save a field mapping to database when agent finalizes a concept/field.
+        
+        Args:
+            table_name: Database table name
+            field_name: Field name in table
+            field_type: Data type of field
+            concept: Human-readable concept
+            operator: SQL operator (=, IN, BETWEEN, etc.)
+            value: Filter value(s)
+            sql_criterion: SQL WHERE clause fragment
+            display_text: Display text for UI
+            source: Source of mapping ('agent', 'user', 'imported')
+            status: Status ('draft', 'pending_agent', 'agent_confirmed', 'applied')
+            
+        Returns:
+            UUID of created mapping, or None on error
+        """
+        from api.models import FieldMapping, CohortProject
+        from django.contrib.auth import get_user_model
+        
+        User = get_user_model()
+        
+        try:
+            project = CohortProject.objects.get(id=self.project_id)
+            user = User.objects.get(id=self.user_id)
+            
+            mapping = FieldMapping.objects.create(
+                cohort_project=project,
+                user=user,
+                source=source,
+                status=status,
+                table_name=table_name,
+                field_name=field_name,
+                field_type=field_type,
+                concept=concept,
+                operator=operator,
+                value=value,
+                sql_criterion=sql_criterion,
+                display_text=display_text,
+                agent_metadata={
+                    'stage': self.state.current_stage,
+                    'confidence': 'high'
+                }
+            )
+            
+            logger.info(f"Saved field mapping {mapping.id}: {display_text}")
+            return str(mapping.id)
+        except Exception as e:
+            logger.error(f"Error saving field mapping: {e}", exc_info=True)
+            return None
+    
+    def sync_criteria_with_field_mappings(self):
+        """
+        Sync current criteria state with field mappings in database.
+        Called after agent finalizes concepts/fields before SQL generation.
+        """
+        if not self.state.criteria:
+            return
+        
+        for criterion in self.state.criteria:
+            revised_criterion = criterion.get('revised_criterion', '')
+            if not revised_criterion:
+                continue
+            
+            # Parse the criterion to extract table.field, operator, and value
+            for entity, mapping in criterion.get('db_mappings', {}).items():
+                table_field = mapping.get('table.field', '')
+                if not table_field or '.' not in table_field:
+                    continue
+                
+                table_name, field_name = table_field.split('.', 1)
+                mapped_concept = mapping.get('mapped_concept', entity)
+                
+                # Determine operator and value from revised_criterion
+                operator = '='
+                value = mapped_concept
+                
+                if 'IN (' in revised_criterion:
+                    operator = 'IN'
+                    # Extract values from IN clause
+                    import re
+                    match = re.search(r'IN\s*\((.*?)\)', revised_criterion)
+                    if match:
+                        value = [v.strip().strip("'\"") for v in match.group(1).split(',')]
+                elif 'BETWEEN' in revised_criterion:
+                    operator = 'BETWEEN'
+                    match = re.search(r'BETWEEN\s+(\S+)\s+AND\s+(\S+)', revised_criterion)
+                    if match:
+                        value = {'min': match.group(1), 'max': match.group(2)}
+                elif '>=' in revised_criterion:
+                    operator = '>='
+                    match = re.search(r'>=\s*(\S+)', revised_criterion)
+                    if match:
+                        value = match.group(1)
+                elif '<=' in revised_criterion:
+                    operator = '<='
+                    match = re.search(r'<=\s*(\S+)', revised_criterion)
+                    if match:
+                        value = match.group(1)
+                
+                # Save to database
+                self.save_field_mapping_to_db(
+                    table_name=table_name,
+                    field_name=field_name,
+                    field_type=mapping.get('field_data_type', 'object'),
+                    concept=criterion.get('text', mapped_concept),
+                    operator=operator,
+                    value=value,
+                    sql_criterion=revised_criterion,
+                    display_text=f"{field_name}: {mapped_concept}",
+                    source='agent',
+                    status='agent_confirmed'
+                )
+
     def cleanup(self):
         """Cleanup resources"""
         if hasattr(self, 'agent'):

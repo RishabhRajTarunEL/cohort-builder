@@ -23,6 +23,11 @@ def generate_schema_keys(db_path: str, schema: Dict) -> Dict:
     """
     Extract primary and foreign key relationships from SQLite database.
     
+    Uses multiple strategies:
+    1. SQLite PRAGMA (if PKs/FKs are explicitly defined)
+    2. Naming conventions (e.g., 'id', 'table_id', 'table_name_id')
+    3. Common patterns (e.g., 'person_id', 'patient_id')
+    
     Args:
         db_path: Path to SQLite database file
         schema: Database schema dictionary
@@ -40,27 +45,88 @@ def generate_schema_keys(db_path: str, schema: Dict) -> Dict:
     cursor = conn.cursor()
     
     schema_keys = {}
+    all_tables = set(schema.keys())
+    
+    # Build lookup for table name variations (for FK inference)
+    table_name_lookup = {}
+    for table in all_tables:
+        # person -> person, person_id
+        table_name_lookup[table.lower()] = table
+        table_name_lookup[f"{table.lower()}_id"] = table
+        # Remove common suffixes for matching
+        for suffix in ['_table', '_data', '_info', 's']:
+            if table.lower().endswith(suffix):
+                base = table.lower()[:-len(suffix)]
+                table_name_lookup[base] = table
+                table_name_lookup[f"{base}_id"] = table
     
     for table_name in schema.keys():
         try:
-            # Get primary key from table_info
-            cursor.execute(f"PRAGMA table_info({table_name})")
+            # Get column info
+            cursor.execute(f"PRAGMA table_info('{table_name}')")
             columns = cursor.fetchall()
             # Column structure: (cid, name, type, notnull, default, pk)
+            column_names = [col[1] for col in columns]
+            
+            # === PRIMARY KEY DETECTION ===
+            # Strategy 1: SQLite PRAGMA (explicit PK)
             pk = next((col[1] for col in columns if col[5] == 1), None)
             
-            # Get foreign keys
-            cursor.execute(f"PRAGMA foreign_key_list({table_name})")
+            # Strategy 2: Naming conventions
+            if not pk:
+                # Look for common PK patterns
+                pk_patterns = [
+                    f"{table_name}_id",           # table_id
+                    f"{table_name.lower()}_id",   # table_id (lowercase)
+                    f"{table_name}id",            # tableid
+                    "id",                          # id
+                    f"{table_name.rstrip('s')}_id" # Remove trailing 's' (e.g., patients -> patient_id)
+                ]
+                for pattern in pk_patterns:
+                    matches = [c for c in column_names if c.lower() == pattern.lower()]
+                    if matches:
+                        pk = matches[0]
+                        break
+                
+                # Strategy 3: First column ending with '_id' that matches table name pattern
+                if not pk:
+                    for col in column_names:
+                        if col.lower().endswith('_id') and table_name.lower().startswith(col.lower().replace('_id', '')):
+                            pk = col
+                            break
+            
+            # === FOREIGN KEY DETECTION ===
+            # Strategy 1: SQLite PRAGMA (explicit FKs)
+            cursor.execute(f"PRAGMA foreign_key_list('{table_name}')")
             fk_rows = cursor.fetchall()
             # FK structure: (id, seq, table, from, to, on_update, on_delete, match)
             fks = {row[3]: row[2] for row in fk_rows}
+            
+            # Strategy 2: Infer FKs from column naming conventions
+            for col_name in column_names:
+                if col_name == pk:  # Skip the primary key
+                    continue
+                    
+                col_lower = col_name.lower()
+                
+                # Check if column looks like a foreign key (ends with _id)
+                if col_lower.endswith('_id') and col_name not in fks:
+                    # Extract potential table name
+                    potential_table = col_lower[:-3]  # Remove '_id'
+                    
+                    # Check if this matches any table
+                    if potential_table in table_name_lookup:
+                        referenced_table = table_name_lookup[potential_table]
+                        if referenced_table != table_name:  # Don't self-reference
+                            fks[col_name] = referenced_table
+                            logger.debug(f"Inferred FK: {table_name}.{col_name} -> {referenced_table}")
             
             schema_keys[table_name] = {
                 "pk": pk,
                 "fks": fks
             }
             
-            logger.info(f"Extracted keys for table {table_name}: pk={pk}, fks={len(fks)}")
+            logger.info(f"Extracted keys for {table_name}: pk={pk}, fks={list(fks.keys())}")
             
         except Exception as e:
             logger.warning(f"Failed to extract keys for table {table_name}: {e}")
@@ -70,6 +136,12 @@ def generate_schema_keys(db_path: str, schema: Dict) -> Dict:
             }
     
     conn.close()
+    
+    # Log summary
+    tables_with_pk = sum(1 for t in schema_keys.values() if t.get('pk'))
+    tables_with_fk = sum(1 for t in schema_keys.values() if t.get('fks'))
+    logger.info(f"Schema keys generated: {len(schema_keys)} tables, {tables_with_pk} with PK, {tables_with_fk} with FKs")
+    
     return schema_keys
 
 
