@@ -86,7 +86,7 @@ export default function Header() {
         {/* Right side - User Profile and Actions */}
         <div className="flex items-center justify-end gap-2">
           {/* User Profile Dropdown */}
-          <div className="relative flex items-center">
+          <div className="relative">
             <button
               onClick={() => setIsDropdownOpen(!isDropdownOpen)}
               className="flex items-center gap-2 px-2 py-1 rounded-sm transition-all duration-200 hover:bg-gray-50"
@@ -107,7 +107,7 @@ export default function Header() {
                   className="fixed inset-0 z-10"
                   onClick={() => setIsDropdownOpen(false)}
                 />
-                <div className="absolute right-0 mt-2 w-48 bg-white rounded-sm shadow-lg border border-gray-200 py-1 z-20">
+                <div className="absolute right-0 top-full mt-1 w-48 bg-white rounded-md shadow-lg border border-gray-200 py-1 z-20 min-w-max">
                   <button
                     onClick={() => {
                       router.push('/profile');

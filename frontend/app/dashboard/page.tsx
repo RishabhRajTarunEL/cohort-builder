@@ -118,14 +118,15 @@ export default function DashboardPage() {
     }
   };
 
-  const createCohortProject = async (projectName: string) => {
+  const createCohortProject = async (projectName: string, description: string = '') => {
     if (!selectedAtlas) return;
 
     try {
       const project = await api.post('/cohort-projects', {
         name: projectName,
         atlas_id: selectedAtlas.atlas_id,
-        atlas_name: selectedAtlas.atlas_name
+        atlas_name: selectedAtlas.atlas_name,
+        description: description
       });
       
       router.push(`/chat/${project.id}`);

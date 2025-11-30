@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useState, useRef, useEffect } from 'react';
+import React, { useState, useRef, useEffect, useCallback } from 'react';
 import { ArrowRight, User, Bot, Loader2, AlertCircle, CheckCircle, XCircle, Clock } from 'lucide-react';
 import { CriteriaChips, SQLPreview, QueryResults } from '@/app/components/criteria';
 import DynamicCriterionComponent from '@/app/components/criteria/DynamicCriterionComponent';
@@ -62,6 +62,7 @@ export default function ConversationalChat({ projectId }: ConversationalChatProp
   const [input, setInput] = useState('');
   const [loading, setLoading] = useState(false);
   const [loadingProject, setLoadingProject] = useState(true);
+  const [projectError, setProjectError] = useState<string | null>(null);
   const [criteriaValues, setCriteriaValues] = useState<{ [key: string]: any }>({});
   const [fieldMappingChanges, setFieldMappingChanges] = useState<{ [key: string]: string }>({});
   
@@ -69,41 +70,48 @@ export default function ConversationalChat({ projectId }: ConversationalChatProp
   const textareaRef = useRef<HTMLTextAreaElement>(null);
 
   // Load project from API
-  useEffect(() => {
-    const loadProject = async () => {
-      try {
-        setLoadingProject(true);
-        const csrfToken = getCookie('csrftoken');
-        const headers: Record<string, string> = {
-          'Content-Type': 'application/json',
-        };
-        if (csrfToken) {
-          headers['X-CSRFToken'] = csrfToken;
-        }
-
-        const response = await fetch(`${API_URL}/cohort-projects/${projectId}`, {
-          method: 'GET',
-          headers,
-          credentials: 'include',
-        });
-
-        if (response.ok) {
-          const projectData = await response.json();
-          setProject(projectData);
-        } else {
-          console.error('Failed to load project');
-        }
-      } catch (error) {
-        console.error('Error loading project:', error);
-      } finally {
-        setLoadingProject(false);
+  const loadProject = useCallback(async () => {
+    if (!projectId) return;
+    
+    try {
+      setLoadingProject(true);
+      setProjectError(null);
+      const csrfToken = getCookie('csrftoken');
+      const headers: Record<string, string> = {
+        'Content-Type': 'application/json',
+      };
+      if (csrfToken) {
+        headers['X-CSRFToken'] = csrfToken;
       }
-    };
 
+      const response = await fetch(`${API_URL}/cohort-projects/${projectId}`, {
+        method: 'GET',
+        headers,
+        credentials: 'include',
+      });
+
+      if (response.ok) {
+        const projectData = await response.json();
+        setProject(projectData);
+        setProjectError(null);
+      } else {
+        const errorData = await response.json().catch(() => ({ detail: 'Unknown error' }));
+        console.error('Failed to load project:', response.status, errorData);
+        setProjectError(errorData.detail || `Failed to load project (${response.status})`);
+      }
+    } catch (error: any) {
+      console.error('Error loading project:', error);
+      setProjectError(error.message || 'Failed to connect to server');
+    } finally {
+      setLoadingProject(false);
+    }
+  }, [projectId]);
+
+  useEffect(() => {
     if (projectId) {
       loadProject();
     }
-  }, [projectId]);
+  }, [projectId, loadProject]);
 
   // Load chat history when project loads
   useEffect(() => {
@@ -611,12 +619,25 @@ export default function ConversationalChat({ projectId }: ConversationalChatProp
     );
   }
 
-  // Show error if project not found
-  if (!loadingProject && !project) {
+  // Show error if project not found or failed to load
+  if (projectError || (!loadingProject && !project)) {
     return (
       <div className="flex flex-col h-full bg-white items-center justify-center">
         <AlertCircle className="w-8 h-8 text-red-600 mb-2" />
-        <p className="text-sm text-red-600">Project not found</p>
+        <p className="text-sm text-red-600 mb-4">
+          {projectError || 'Project not found or you do not have access to it.'}
+        </p>
+        {projectId && (
+          <button
+            onClick={() => {
+              setProjectError(null);
+              loadProject();
+            }}
+            className="px-4 py-2 bg-primary text-white rounded-lg hover:bg-primary-dark transition-colors"
+          >
+            Retry
+          </button>
+        )}
       </div>
     );
   }

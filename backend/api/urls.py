@@ -26,6 +26,8 @@ from api.views import (
     CohortProjectDetailView,
     ChatMessageListCreateView,
     DatabaseSchemaView,
+    ProjectShareView,
+    UserListView,
     # Chat views
     ChatStreamView,
     ChatSessionView,
@@ -70,6 +72,8 @@ urlpatterns = [
     path('cohort-projects/<int:project_id>', CohortProjectDetailView.as_view(), name='cohort-project-detail'),
     path('cohort-projects/<int:project_id>/messages', ChatMessageListCreateView.as_view(), name='chat-message-list-create'),
     path('cohort-projects/<int:project_id>/schema', DatabaseSchemaView.as_view(), name='database-schema'),
+    path('cohort-projects/<int:project_id>/share', ProjectShareView.as_view(), name='project-share'),
+    path('users', UserListView.as_view(), name='user-list'),
     
     # Field Mapping endpoints (lazy loading)
     path('cohort-projects/<int:project_id>/cache-status', CacheStatusView.as_view(), name='cache-status'),

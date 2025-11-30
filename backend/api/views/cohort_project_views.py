@@ -11,8 +11,46 @@ from django.shortcuts import get_object_or_404
 from api.models import CohortProject, ChatMessage, AtlasProcessingTask
 from api.serializers import CohortProjectSerializer, ChatMessageSerializer
 from api.storage import get_gcs_storage
+from django.contrib.auth.models import User
+from rest_framework.exceptions import NotFound
 import json
 from pathlib import Path
+
+
+def get_project_with_access(project_id, user):
+    """
+    Get a cohort project if user has access (owner or shared).
+    Raises NotFound if project doesn't exist or user doesn't have access.
+    """
+    import logging
+    logger = logging.getLogger(__name__)
+    
+    try:
+        project = CohortProject.objects.get(id=project_id)
+        logger.info(f"Found project {project_id}, checking access for user {user.id}")
+        
+        # Check if user is owner
+        is_owner = project.user == user
+        logger.info(f"User {user.id} is owner: {is_owner}")
+        
+        # Check if user is in shared_with
+        is_shared = project.shared_with.filter(id=user.id).exists()
+        logger.info(f"User {user.id} is shared: {is_shared}")
+        
+        if not (is_owner or is_shared):
+            logger.warning(f"User {user.id} does not have access to project {project_id}")
+            raise NotFound("You do not have permission to access this project")
+        
+        logger.info(f"User {user.id} has access to project {project_id}")
+        return project
+    except CohortProject.DoesNotExist:
+        logger.warning(f"Project {project_id} not found")
+        raise NotFound("Project not found")
+    except NotFound:
+        raise
+    except Exception as e:
+        logger.error(f"Error checking project access: {e}", exc_info=True)
+        raise NotFound(f"Error accessing project: {str(e)}")
 
 logger = logging.getLogger(__name__)
 
@@ -22,10 +60,17 @@ class CohortProjectListCreateView(APIView):
     permission_classes = (IsAuthenticated,)
     
     def get(self, request):
-        """Get all cohort projects for the authenticated user"""
+        """Get all cohort projects for the authenticated user (owned and shared)"""
         try:
-            projects = CohortProject.objects.filter(user=request.user)
-            serializer = CohortProjectSerializer(projects, many=True)
+            # Get owned projects
+            owned_projects = CohortProject.objects.filter(user=request.user)
+            # Get shared projects
+            shared_projects = CohortProject.objects.filter(shared_with=request.user)
+            
+            # Combine and deduplicate
+            all_projects = (owned_projects | shared_projects).distinct()
+            
+            serializer = CohortProjectSerializer(all_projects, many=True, context={'request': request})
             return Response(serializer.data, status=status.HTTP_200_OK)
         except Exception as e:
             logger.error(f"Failed to list cohort projects: {str(e)}", exc_info=True)
@@ -89,11 +134,14 @@ class CohortProjectDetailView(APIView):
     permission_classes = (IsAuthenticated,)
     
     def get(self, request, project_id):
-        """Get a specific cohort project"""
+        """Get a specific cohort project (owner or shared user)"""
         try:
-            project = get_object_or_404(CohortProject, id=project_id, user=request.user)
-            serializer = CohortProjectSerializer(project)
+            project = get_project_with_access(project_id, request.user)
+            serializer = CohortProjectSerializer(project, context={'request': request})
             return Response(serializer.data, status=status.HTTP_200_OK)
+        except NotFound as e:
+            logger.warning(f"Project {project_id} not found or no access for user {request.user.id}: {str(e)}")
+            raise  # Let DRF handle NotFound exceptions
         except Exception as e:
             logger.error(f"Failed to get cohort project: {str(e)}", exc_info=True)
             return Response(
@@ -102,9 +150,16 @@ class CohortProjectDetailView(APIView):
             )
     
     def patch(self, request, project_id):
-        """Update a cohort project"""
+        """Update a cohort project (owner only)"""
         try:
-            project = get_object_or_404(CohortProject, id=project_id, user=request.user)
+            project = get_object_or_404(CohortProject, id=project_id)
+            
+            # Only owner can update
+            if project.user != request.user:
+                return Response(
+                    {'detail': 'Only the project owner can update this project'},
+                    status=status.HTTP_403_FORBIDDEN
+                )
             
             # Update allowed fields
             if 'name' in request.data:
@@ -113,7 +168,7 @@ class CohortProjectDetailView(APIView):
                 project.description = request.data['description']
             
             project.save()
-            serializer = CohortProjectSerializer(project)
+            serializer = CohortProjectSerializer(project, context={'request': request})
             
             return Response(serializer.data, status=status.HTTP_200_OK)
         except Exception as e:
@@ -124,9 +179,17 @@ class CohortProjectDetailView(APIView):
             )
     
     def delete(self, request, project_id):
-        """Delete a cohort project"""
+        """Delete a cohort project (owner only)"""
         try:
-            project = get_object_or_404(CohortProject, id=project_id, user=request.user)
+            project = get_object_or_404(CohortProject, id=project_id)
+            
+            # Only owner can delete
+            if project.user != request.user:
+                return Response(
+                    {'detail': 'Only the project owner can delete this project'},
+                    status=status.HTTP_403_FORBIDDEN
+                )
+            
             project.delete()
             
             return Response(
@@ -148,7 +211,7 @@ class ChatMessageListCreateView(APIView):
     def get(self, request, project_id):
         """Get all chat messages for a cohort project"""
         try:
-            project = get_object_or_404(CohortProject, id=project_id, user=request.user)
+            project = get_project_with_access(project_id, request.user)
             messages = ChatMessage.objects.filter(cohort_project=project)
             serializer = ChatMessageSerializer(messages, many=True)
             return Response(serializer.data, status=status.HTTP_200_OK)
@@ -162,7 +225,7 @@ class ChatMessageListCreateView(APIView):
     def post(self, request, project_id):
         """Create a new chat message"""
         try:
-            project = get_object_or_404(CohortProject, id=project_id, user=request.user)
+            project = get_project_with_access(project_id, request.user)
             
             content = request.data.get('content')
             role = request.data.get('role', 'user')
@@ -204,8 +267,8 @@ class DatabaseSchemaView(APIView):
     def get(self, request, project_id):
         """Get the database schema for a specific cohort project"""
         try:
-            # Verify the project exists and belongs to the user
-            project = get_object_or_404(CohortProject, id=project_id, user=request.user)
+            # Verify the project exists and user has access
+            project = get_project_with_access(project_id, request.user)
             
             # Validate atlas_id exists
             if not project.atlas_id:
@@ -276,5 +339,110 @@ class DatabaseSchemaView(APIView):
             logger.error(f"Failed to get database schema: {str(e)}", exc_info=True)
             return Response(
                 {'detail': f'Failed to get schema: {str(e)}'},
+                status=status.HTTP_500_INTERNAL_SERVER_ERROR
+            )
+
+
+class ProjectShareView(APIView):
+    """Share/unshare a cohort project with users"""
+    permission_classes = (IsAuthenticated,)
+    
+    def post(self, request, project_id):
+        """Share project with users"""
+        try:
+            project = get_object_or_404(CohortProject, id=project_id)
+            
+            # Only owner can share
+            if project.user != request.user:
+                return Response(
+                    {'detail': 'Only the project owner can share this project'},
+                    status=status.HTTP_403_FORBIDDEN
+                )
+            
+            user_ids = request.data.get('user_ids', [])
+            if not isinstance(user_ids, list):
+                return Response(
+                    {'detail': 'user_ids must be a list'},
+                    status=status.HTTP_400_BAD_REQUEST
+                )
+            
+            # Get users to share with
+            users = User.objects.filter(id__in=user_ids)
+            if users.count() != len(user_ids):
+                return Response(
+                    {'detail': 'Some user IDs are invalid'},
+                    status=status.HTTP_400_BAD_REQUEST
+                )
+            
+            # Add users to shared_with (doesn't duplicate)
+            project.shared_with.add(*users)
+            
+            serializer = CohortProjectSerializer(project, context={'request': request})
+            logger.info(f"Project {project_id} shared with {len(users)} users")
+            
+            return Response(serializer.data, status=status.HTTP_200_OK)
+            
+        except Exception as e:
+            logger.error(f"Failed to share project: {str(e)}", exc_info=True)
+            return Response(
+                {'detail': f'Failed to share project: {str(e)}'},
+                status=status.HTTP_500_INTERNAL_SERVER_ERROR
+            )
+    
+    def delete(self, request, project_id):
+        """Unshare project with users"""
+        try:
+            project = get_object_or_404(CohortProject, id=project_id)
+            
+            # Only owner can unshare
+            if project.user != request.user:
+                return Response(
+                    {'detail': 'Only the project owner can unshare this project'},
+                    status=status.HTTP_403_FORBIDDEN
+                )
+            
+            user_ids = request.data.get('user_ids', [])
+            if not isinstance(user_ids, list):
+                return Response(
+                    {'detail': 'user_ids must be a list'},
+                    status=status.HTTP_400_BAD_REQUEST
+                )
+            
+            # Remove users from shared_with
+            users = User.objects.filter(id__in=user_ids)
+            project.shared_with.remove(*users)
+            
+            serializer = CohortProjectSerializer(project, context={'request': request})
+            logger.info(f"Project {project_id} unshared with {len(users)} users")
+            
+            return Response(serializer.data, status=status.HTTP_200_OK)
+            
+        except Exception as e:
+            logger.error(f"Failed to unshare project: {str(e)}", exc_info=True)
+            return Response(
+                {'detail': f'Failed to unshare project: {str(e)}'},
+                status=status.HTTP_500_INTERNAL_SERVER_ERROR
+            )
+
+
+class UserListView(APIView):
+    """List all users for sharing dropdown"""
+    permission_classes = (IsAuthenticated,)
+    
+    def get(self, request):
+        """Get all users (excluding current user)"""
+        try:
+            from api.serializers.project_serializers import UserSerializer
+            
+            # Get all users except current user
+            users = User.objects.exclude(id=request.user.id).order_by('username')
+            serializer = UserSerializer(users, many=True)
+            
+            return Response(serializer.data, status=status.HTTP_200_OK)
+            
+        except Exception as e:
+            logger.error(f"Failed to list users: {str(e)}", exc_info=True)
+            return Response(
+                {'detail': f'Failed to list users: {str(e)}'},
                 status=status.HTTP_500_INTERNAL_SERVER_ERROR
             )

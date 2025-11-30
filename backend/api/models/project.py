@@ -10,6 +10,7 @@ class CohortProject(models.Model):
     atlas_id = models.CharField(max_length=255)
     atlas_name = models.CharField(max_length=255)
     user = models.ForeignKey(User, on_delete=models.CASCADE, related_name='cohort_projects')
+    shared_with = models.ManyToManyField(User, related_name='shared_cohort_projects', blank=True)
     description = models.TextField(blank=True)
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
@@ -23,6 +24,14 @@ class CohortProject(models.Model):
     
     def __str__(self):
         return f"{self.name} ({self.atlas_name})"
+    
+    def is_shared_with(self, user):
+        """Check if project is shared with a user"""
+        return self.shared_with.filter(id=user.id).exists()
+    
+    def can_access(self, user):
+        """Check if user can access this project (owner or shared)"""
+        return self.user == user or self.is_shared_with(user)
 
 
 class ChatSession(models.Model):

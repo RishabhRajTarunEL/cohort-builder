@@ -1,37 +1,41 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { Modal, Button, FormField } from '@/app/components/ui';
 
-interface CreateCohortDialogProps {
+interface EditProjectDialogProps {
   isOpen: boolean;
   onClose: () => void;
-  onConfirm: (projectName: string, description: string) => void;
-  atlasName: string;
-  atlasId: string;
+  onConfirm: (name: string, description: string) => Promise<void>;
+  projectName: string;
+  projectDescription: string;
 }
 
-export default function CreateCohortDialog({
+export default function EditProjectDialog({
   isOpen,
   onClose,
   onConfirm,
-  atlasName,
-  atlasId
-}: CreateCohortDialogProps) {
-  const [projectName, setProjectName] = useState('');
-  const [description, setDescription] = useState('');
+  projectName,
+  projectDescription
+}: EditProjectDialogProps) {
+  const [name, setName] = useState(projectName);
+  const [description, setDescription] = useState(projectDescription);
   const [isSubmitting, setIsSubmitting] = useState(false);
+
+  // Update form when project data changes
+  useEffect(() => {
+    setName(projectName);
+    setDescription(projectDescription);
+  }, [projectName, projectDescription]);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!projectName.trim()) return;
+    if (!name.trim()) return;
 
     setIsSubmitting(true);
     try {
-      await onConfirm(projectName.trim(), description.trim());
-      setProjectName('');
-      setDescription('');
+      await onConfirm(name.trim(), description.trim());
       onClose();
     } catch (error) {
-      console.error('Failed to create cohort project:', error);
+      console.error('Failed to update project:', error);
     } finally {
       setIsSubmitting(false);
     }
@@ -39,28 +43,15 @@ export default function CreateCohortDialog({
 
   const handleClose = () => {
     if (!isSubmitting) {
-      setProjectName('');
-      setDescription('');
+      setName(projectName);
+      setDescription(projectDescription);
       onClose();
     }
   };
 
   return (
-    <Modal isOpen={isOpen} onClose={handleClose} title="Start New Cohort" maxWidth="max-w-md">
+    <Modal isOpen={isOpen} onClose={handleClose} title="Edit Project" maxWidth="max-w-md">
       <form onSubmit={handleSubmit} className="space-y-5">
-        {/* Atlas Info */}
-        <div className="section">
-          <p className="text-xs font-semibold text-text-light uppercase tracking-wider mb-1">
-            Atlas
-          </p>
-          <p className="text-sm font-medium text-text">
-            {atlasName}
-          </p>
-          <p className="text-xs text-text-light mt-1">
-            ID: {atlasId}
-          </p>
-        </div>
-
         {/* Project Name Input */}
         <FormField 
           label="Project Name" 
@@ -71,8 +62,8 @@ export default function CreateCohortDialog({
           <input
             id="projectName"
             type="text"
-            value={projectName}
-            onChange={(e) => setProjectName(e.target.value)}
+            value={name}
+            onChange={(e) => setName(e.target.value)}
             placeholder="e.g., Cancer Patient Analysis"
             disabled={isSubmitting}
             className="form-control"
@@ -111,15 +102,16 @@ export default function CreateCohortDialog({
           </Button>
           <Button
             type="submit"
-            disabled={isSubmitting || !projectName.trim()}
+            disabled={isSubmitting || !name.trim()}
             variant="accent"
             loading={isSubmitting}
             className="flex-1"
           >
-            Start Cohort
+            Save Changes
           </Button>
         </div>
       </form>
     </Modal>
   );
 }
+

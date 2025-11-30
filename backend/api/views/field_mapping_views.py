@@ -9,11 +9,26 @@ from rest_framework.views import APIView
 from rest_framework.response import Response
 from rest_framework.permissions import IsAuthenticated
 from django.shortcuts import get_object_or_404
+from django.http import Http404
 from api.models import CohortProject, FieldMapping
 from api.storage.atlas_file_cache import AtlasFileCache
 import pandas as pd
 
 logger = logging.getLogger(__name__)
+
+
+def get_project_with_access(project_id, user):
+    """
+    Get a cohort project if user has access (owner or shared).
+    Raises Http404 if project doesn't exist or user doesn't have access.
+    """
+    try:
+        project = CohortProject.objects.get(id=project_id)
+        if not project.can_access(user):
+            raise Http404("You do not have permission to access this project")
+        return project
+    except CohortProject.DoesNotExist:
+        raise Http404("Project not found")
 
 
 class CacheStatusView(APIView):
@@ -29,7 +44,7 @@ class CacheStatusView(APIView):
     def get(self, request, project_id):
         """Check if cache is ready (lightweight, no file loading)"""
         try:
-            project = get_object_or_404(CohortProject, id=project_id, user=request.user)
+            project = get_project_with_access(project_id, request.user)
             
             # Validate atlas_id exists
             if not project.atlas_id:
@@ -75,7 +90,7 @@ class CacheStatusView(APIView):
         This makes the first message much faster.
         """
         try:
-            project = get_object_or_404(CohortProject, id=project_id, user=request.user)
+            project = get_project_with_access(project_id, request.user)
             
             if not project.atlas_id:
                 return Response({
@@ -139,7 +154,7 @@ class SchemaValidationView(APIView):
     def get(self, request, project_id):
         """Compare schema.json with actual database"""
         try:
-            project = get_object_or_404(CohortProject, id=project_id, user=request.user)
+            project = get_project_with_access(project_id, request.user)
             
             if not project.atlas_id:
                 return Response(
@@ -180,7 +195,7 @@ class ProjectSchemaView(APIView):
     def get(self, request, project_id):
         """Get schema structure for project"""
         try:
-            project = get_object_or_404(CohortProject, id=project_id, user=request.user)
+            project = get_project_with_access(project_id, request.user)
             
             # Get cached atlas files
             cache = AtlasFileCache(project.atlas_id)
@@ -230,7 +245,7 @@ class ProjectTableFieldsView(APIView):
     def get(self, request, project_id, table_name):
         """Get fields for specific table"""
         try:
-            project = get_object_or_404(CohortProject, id=project_id, user=request.user)
+            project = get_project_with_access(project_id, request.user)
             
             # Get cached atlas files
             cache = AtlasFileCache(project.atlas_id)
@@ -305,7 +320,7 @@ class ProjectFieldValuesView(APIView):
     def get(self, request, project_id, table_name, field_name):
         """Get values for specific field"""
         try:
-            project = get_object_or_404(CohortProject, id=project_id, user=request.user)
+            project = get_project_with_access(project_id, request.user)
             
             # Get cached atlas files
             cache = AtlasFileCache(project.atlas_id)
@@ -406,7 +421,7 @@ class FieldMappingListCreateView(APIView):
     def get(self, request, project_id):
         """Get all field mappings for project"""
         try:
-            project = get_object_or_404(CohortProject, id=project_id, user=request.user)
+            project = get_project_with_access(project_id, request.user)
             
             # Get query parameters for filtering
             status_filter = request.query_params.get('status')
@@ -468,7 +483,7 @@ class FieldMappingListCreateView(APIView):
     def post(self, request, project_id):
         """Create new field mapping"""
         try:
-            project = get_object_or_404(CohortProject, id=project_id, user=request.user)
+            project = get_project_with_access(project_id, request.user)
             
             # Create field mapping
             mapping = FieldMapping.objects.create(
@@ -519,7 +534,7 @@ class FieldMappingDetailView(APIView):
     def get(self, request, project_id, mapping_id):
         """Get specific field mapping"""
         try:
-            project = get_object_or_404(CohortProject, id=project_id, user=request.user)
+            project = get_project_with_access(project_id, request.user)
             mapping = get_object_or_404(FieldMapping, id=mapping_id, cohort_project=project)
             
             return Response({
@@ -550,7 +565,7 @@ class FieldMappingDetailView(APIView):
     def patch(self, request, project_id, mapping_id):
         """Update field mapping (agent can finalize here)"""
         try:
-            project = get_object_or_404(CohortProject, id=project_id, user=request.user)
+            project = get_project_with_access(project_id, request.user)
             mapping = get_object_or_404(FieldMapping, id=mapping_id, cohort_project=project)
             
             # Update allowed fields
@@ -592,7 +607,7 @@ class FieldMappingDetailView(APIView):
     def delete(self, request, project_id, mapping_id):
         """Delete field mapping"""
         try:
-            project = get_object_or_404(CohortProject, id=project_id, user=request.user)
+            project = get_project_with_access(project_id, request.user)
             mapping = get_object_or_404(FieldMapping, id=mapping_id, cohort_project=project)
             
             mapping.delete()

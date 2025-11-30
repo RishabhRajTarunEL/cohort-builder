@@ -19,7 +19,9 @@ from .cohort_project_views import (
     CohortProjectListCreateView,
     CohortProjectDetailView,
     ChatMessageListCreateView,
-    DatabaseSchemaView
+    DatabaseSchemaView,
+    ProjectShareView,
+    UserListView
 )
 
 from .polly_views import (
@@ -56,6 +58,8 @@ __all__ = [
     'CohortProjectDetailView',
     'ChatMessageListCreateView',
     'DatabaseSchemaView',
+    'ProjectShareView',
+    'UserListView',
     # Polly views
     'PollyAtlasListView',
     'ProcessAtlasView',

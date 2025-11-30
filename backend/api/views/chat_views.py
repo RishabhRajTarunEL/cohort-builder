@@ -18,6 +18,8 @@ from rest_framework.permissions import IsAuthenticated
 
 from api.models import CohortProject, ChatSession, ChatMessage
 from api.services.agent import AgentService
+from api.views.cohort_project_views import get_project_with_access
+from rest_framework.exceptions import NotFound
 
 logger = logging.getLogger(__name__)
 
@@ -51,12 +53,9 @@ class ChatStreamView(APIView):
             
             # Get cohort project
             try:
-                project = CohortProject.objects.get(id=project_id, user=request.user)
-            except CohortProject.DoesNotExist:
-                return Response(
-                    {"error": "Project not found"},
-                    status=status.HTTP_404_NOT_FOUND
-                )
+                project = get_project_with_access(project_id, request.user)
+            except NotFound:
+                raise  # Let DRF handle NotFound exceptions
             
             # Get or create chat session
             chat_session, created = ChatSession.objects.get_or_create(
@@ -330,7 +329,7 @@ class ChatSessionView(APIView):
     def get(self, request, project_id):
         """Get current chat session state."""
         try:
-            project = CohortProject.objects.get(id=project_id, user=request.user)
+            project = get_project_with_access(project_id, request.user)
             
             try:
                 chat_session = ChatSession.objects.get(
@@ -364,11 +363,8 @@ class ChatSessionView(APIView):
                     'last_query_results': None
                 })
                 
-        except CohortProject.DoesNotExist:
-            return Response(
-                {"error": "Project not found"},
-                status=status.HTTP_404_NOT_FOUND
-            )
+        except NotFound:
+            raise  # Let DRF handle NotFound exceptions
         except Exception as e:
             logger.error(f"Error getting chat session: {e}")
             return Response(
@@ -379,7 +375,7 @@ class ChatSessionView(APIView):
     def post(self, request, project_id):
         """Update chat session state."""
         try:
-            project = CohortProject.objects.get(id=project_id, user=request.user)
+            project = get_project_with_access(project_id, request.user)
             
             chat_session, created = ChatSession.objects.get_or_create(
                 cohort_project=project,
@@ -424,7 +420,7 @@ class ChatSessionView(APIView):
     def delete(self, request, project_id):
         """Reset/clear chat session."""
         try:
-            project = CohortProject.objects.get(id=project_id, user=request.user)
+            project = get_project_with_access(project_id, request.user)
             
             # Delete all messages
             ChatMessage.objects.filter(cohort_project=project).delete()
@@ -472,7 +468,7 @@ class ChatHistoryView(APIView):
     def get(self, request, project_id):
         """Get chat history with UI component metadata."""
         try:
-            project = CohortProject.objects.get(id=project_id, user=request.user)
+            project = get_project_with_access(project_id, request.user)
             
             # Get query params
             limit = int(request.query_params.get('limit', 50))
@@ -511,11 +507,8 @@ class ChatHistoryView(APIView):
                 'messages': messages_data
             })
             
-        except CohortProject.DoesNotExist:
-            return Response(
-                {"error": "Project not found"},
-                status=status.HTTP_404_NOT_FOUND
-            )
+        except NotFound:
+            raise  # Let DRF handle NotFound exceptions
         except Exception as e:
             logger.error(f"Error getting chat history: {e}")
             return Response(
@@ -550,7 +543,7 @@ class ChatActionView(APIView):
                     status=status.HTTP_400_BAD_REQUEST
                 )
             
-            project = CohortProject.objects.get(id=project_id, user=request.user)
+            project = get_project_with_access(project_id, request.user)
             chat_session = ChatSession.objects.get(
                 cohort_project=project,
                 user=request.user
@@ -703,9 +696,14 @@ class ConversationalChatView(APIView):
                     status=status.HTTP_400_BAD_REQUEST
                 )
             
-            # Get project
+            # Get project (check access for owner or shared users)
             try:
-                project = CohortProject.objects.get(id=project_id, user=request.user)
+                project = CohortProject.objects.get(id=project_id)
+                if not project.can_access(request.user):
+                    return Response(
+                        {"error": "You do not have permission to access this project"},
+                        status=status.HTTP_403_FORBIDDEN
+                    )
             except CohortProject.DoesNotExist:
                 return Response(
                     {"error": "Project not found"},
