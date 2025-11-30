@@ -38,11 +38,46 @@ export default function DashboardPage() {
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [processingTasks, setProcessingTasks] = useState<{ [key: string]: TaskStatus }>({});
+  const [cohortProjectsCount, setCohortProjectsCount] = useState(0);
+  const [recentQueriesCount, setRecentQueriesCount] = useState(0);
 
-  // Fetch atlases on component mount
+  // Fetch atlases and stats on component mount
   useEffect(() => {
     fetchAtlases();
+    fetchStats();
   }, []);
+
+  const fetchStats = async () => {
+    try {
+      // Fetch cohort projects count
+      const projects = await api.get('/cohort-projects');
+      setCohortProjectsCount(projects.length || 0);
+
+      // Fetch total queries count (all user messages from all projects)
+      let totalMessages = 0;
+      
+      // Fetch messages in parallel for all projects
+      const messagePromises = projects.map(async (project: any) => {
+        try {
+          // Fetch messages with a high limit to get all user messages
+          // The API returns total_count, but we need to filter by role='user'
+          const messages = await api.get(`/chat/history/${project.id}?limit=10000`);
+          // Count only user messages (queries)
+          const userMessages = messages.messages?.filter((msg: any) => msg.role === 'user') || [];
+          return userMessages.length;
+        } catch (err) {
+          console.error(`Failed to fetch messages for project ${project.id}:`, err);
+          return 0;
+        }
+      });
+      
+      const counts = await Promise.all(messagePromises);
+      totalMessages = counts.reduce((sum, count) => sum + count, 0);
+      setRecentQueriesCount(totalMessages);
+    } catch (err) {
+      console.error('Failed to fetch stats:', err);
+    }
+  };
 
   const fetchAtlases = async () => {
     setIsLoading(true);
@@ -90,19 +125,16 @@ export default function DashboardPage() {
       name: 'Total Atlases',
       value: atlases.length.toString(),
       icon: Database,
-      bgColor: 'bg-info',
     },
     {
       name: 'Active Cohorts',
-      value: '12',
+      value: cohortProjectsCount.toString(),
       icon: Users,
-      bgColor: 'bg-error',
     },
     {
       name: 'Recent Queries',
-      value: '48',
+      value: recentQueriesCount.toString(),
       icon: Activity,
-      bgColor: 'bg-warning',
     },
   ];
 
@@ -240,8 +272,8 @@ export default function DashboardPage() {
                     {stat.value}
                   </p>
                 </div>
-                <div className={`w-14 h-14 ${stat.bgColor} rounded-lg flex items-center justify-center`}>
-                  <stat.icon size={28} className="text-white" strokeWidth={2} />
+                <div className="w-14 h-14 rounded-lg flex items-center justify-center">
+                  <stat.icon size={28} className="text-purple-500" strokeWidth={2} />
                 </div>
               </div>
             </div>
@@ -300,18 +332,16 @@ export default function DashboardPage() {
                 key={atlas.atlas_id || `atlas-${index}`}
                 className="card hover:shadow-lg transition-all duration-300 group"
               >
-                <div className="flex items-start justify-between mb-5">
+                <div className="flex items-center justify-between mb-5">
+                  <h3 className="text-xl font-bold text-purple-500">
+                    {atlas.atlas_name}
+                  </h3>
                   <div className="w-14 h-14 rounded-lg bg-purple-100 flex items-center justify-center transition-transform group-hover:scale-110">
                     <Database size={28} className="text-purple-500" strokeWidth={2} />
                   </div>
-                  <span className="px-3 py-1.5 rounded-full text-xs font-semibold bg-green-500 text-white">
-                    Available
-                  </span>
                 </div>
 
-                <h3 className="text-xl font-bold mb-2 text-purple-500">
-                  {atlas.atlas_name}
-                </h3>
+                
                 
                 {atlas.description && (
                   <p className="text-sm mb-4 line-clamp-2 text-gray-500">

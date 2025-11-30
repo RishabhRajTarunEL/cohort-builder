@@ -3,7 +3,7 @@
 import { useState, useEffect } from 'react';
 import { useAuth } from '@/app/contexts/AuthContext';
 import { useRouter } from 'next/navigation';
-import { Folder, MessageSquare, Calendar, Database, Loader2, AlertCircle, Share2, User as UserIcon, X, Edit2 } from 'lucide-react';
+import { Folder, MessageSquare, Calendar, Database, Loader2, AlertCircle, Share2, User as UserIcon, X, Edit2, List, Grid } from 'lucide-react';
 import api from '@/app/lib/api';
 import { Button, Alert, Loading } from '@/app/components/ui';
 import EditProjectDialog from '@/app/components/EditProjectDialog';
@@ -35,6 +35,8 @@ interface CohortProject {
   atlas_name: string;
   description: string;
   message_count: number;
+  title: string;
+  total_chats: number;
   created_at: string;
   updated_at: string;
   shared_with: SharedUser[];
@@ -53,8 +55,12 @@ export default function CohortsPage() {
   const [availableUsers, setAvailableUsers] = useState<SharedUser[]>([]);
   const [selectedUserIds, setSelectedUserIds] = useState<number[]>([]);
   const [isSharing, setIsSharing] = useState(false);
+  const [selectedUserId, setSelectedUserId] = useState<number | null>(null);
   const [editProject, setEditProject] = useState<CohortProject | null>(null);
   const [isUpdating, setIsUpdating] = useState(false);
+  const [viewMode, setViewMode] = useState<'card' | 'table'>('card');
+  const [sortField, setSortField] = useState<string>('created_at');
+  const [sortDirection, setSortDirection] = useState<'asc' | 'desc'>('desc');
 
   useEffect(() => {
     fetchProjects();
@@ -66,6 +72,8 @@ export default function CohortsPage() {
     
     try {
       const data = await api.get('/cohort-projects');
+      // Debug: Log total_chats to verify it's being returned
+      console.log('Projects data:', data.map((p: any) => ({ id: p.id, name: p.name, total_chats: p.total_chats })));
       setProjects(data);
     } catch (err: any) {
       console.error('Failed to fetch projects:', err);
@@ -84,6 +92,7 @@ export default function CohortsPage() {
     e.stopPropagation();
     setShareProject(project);
     setSelectedUserIds(project.shared_with.map(u => u.id));
+    setSelectedUserId(null);
     
     // Fetch available users
     try {
@@ -91,6 +100,16 @@ export default function CohortsPage() {
       setAvailableUsers(users);
     } catch (err) {
       console.error('Failed to fetch users:', err);
+    }
+  };
+
+  const handleAddUser = () => {
+    if (!selectedUserId || typeof selectedUserId !== 'number') return;
+    
+    // Check if user is already in the list
+    if (!selectedUserIds.includes(selectedUserId)) {
+      setSelectedUserIds([...selectedUserIds, selectedUserId]);
+      setSelectedUserId(null); // Reset dropdown
     }
   };
 
@@ -148,6 +167,15 @@ export default function CohortsPage() {
     }
   };
 
+  const handleSort = (field: string) => {
+    if (sortField === field) {
+      setSortDirection(sortDirection === 'asc' ? 'desc' : 'asc');
+    } else {
+      setSortField(field);
+      setSortDirection('asc');
+    }
+  };
+
   const handleUnshare = async (userId: number) => {
     if (!shareProject) return;
     
@@ -192,6 +220,47 @@ export default function CohortsPage() {
   const myProjects = projects.filter(p => p.is_owner);
   const sharedProjects = projects.filter(p => !p.is_owner);
 
+  const sortedProjects = (() => {
+    const projectsToSort = activeTab === 'my' ? myProjects : sharedProjects;
+    return [...projectsToSort].sort((a, b) => {
+      let aValue: any;
+      let bValue: any;
+      
+      switch (sortField) {
+        case 'owner':
+          aValue = a.owner?.full_name || a.owner?.username || '';
+          bValue = b.owner?.full_name || b.owner?.username || '';
+          break;
+        case 'created_at':
+          aValue = new Date(a.created_at).getTime();
+          bValue = new Date(b.created_at).getTime();
+          break;
+        case 'name':
+          aValue = a.name.toLowerCase();
+          bValue = b.name.toLowerCase();
+          break;
+        case 'title':
+          aValue = (a.title || '').toLowerCase();
+          bValue = (b.title || '').toLowerCase();
+          break;
+        case 'total_chats':
+          aValue = a.total_chats || 0;
+          bValue = b.total_chats || 0;
+          break;
+        case 'updated_at':
+          aValue = new Date(a.updated_at).getTime();
+          bValue = new Date(b.updated_at).getTime();
+          break;
+        default:
+          return 0;
+      }
+      
+      if (aValue < bValue) return sortDirection === 'asc' ? -1 : 1;
+      if (aValue > bValue) return sortDirection === 'asc' ? 1 : -1;
+      return 0;
+    });
+  })();
+
   return (
     <div className="min-h-screen bg-white">
       <div className="max-w-7xl mx-auto px-6 py-10">
@@ -205,28 +274,56 @@ export default function CohortsPage() {
           </p>
         </div>
 
-        {/* Tabs */}
-        <div className="mb-6 flex gap-2 border-b border-border">
-          <button
-            onClick={() => setActiveTab('my')}
-            className={`px-6 py-3 font-semibold transition-colors border-b-2 ${
-              activeTab === 'my'
-                ? 'border-primary text-primary'
-                : 'border-transparent text-text-light hover:text-text'
-            }`}
-          >
-            My Projects ({myProjects.length})
-          </button>
-          <button
-            onClick={() => setActiveTab('shared')}
-            className={`px-6 py-3 font-semibold transition-colors border-b-2 ${
-              activeTab === 'shared'
-                ? 'border-primary text-primary'
-                : 'border-transparent text-text-light hover:text-text'
-            }`}
-          >
-            Shared with Me ({sharedProjects.length})
-          </button>
+        {/* Tabs and View Toggle */}
+        <div className="mb-6 flex items-center justify-between border-b border-border">
+          <div className="flex gap-2">
+            <button
+              onClick={() => setActiveTab('my')}
+              className={`px-6 py-3 font-semibold transition-colors border-b-2 ${
+                activeTab === 'my'
+                  ? 'border-primary text-primary'
+                  : 'border-transparent text-text-light hover:text-text'
+              }`}
+            >
+              My Projects ({myProjects.length})
+            </button>
+            <button
+              onClick={() => setActiveTab('shared')}
+              className={`px-6 py-3 font-semibold transition-colors border-b-2 ${
+                activeTab === 'shared'
+                  ? 'border-primary text-primary'
+                  : 'border-transparent text-text-light hover:text-text'
+              }`}
+            >
+              Shared with Me ({sharedProjects.length})
+            </button>
+          </div>
+          
+          {/* View Toggle */}
+          <div className="flex items-center gap-2">
+            <button
+              onClick={() => setViewMode('table')}
+              className={`p-2 rounded-lg transition-colors ${
+                viewMode === 'table'
+                  ? 'bg-primary text-white'
+                  : 'bg-gray-100 text-gray-600 hover:bg-gray-200'
+              }`}
+              title="Table View"
+            >
+              <List size={20} />
+            </button>
+            <button
+              onClick={() => setViewMode('card')}
+              className={`p-2 rounded-lg transition-colors ${
+                viewMode === 'card'
+                  ? 'bg-primary text-white'
+                  : 'bg-gray-100 text-gray-600 hover:bg-gray-200'
+              }`}
+              title="Card View"
+            >
+              <Grid size={20} />
+            </button>
+          </div>
         </div>
 
         {/* Loading State */}
@@ -243,10 +340,119 @@ export default function CohortsPage() {
           </Alert>
         )}
 
-        {/* Projects Grid */}
-        {!isLoading && !error && (activeTab === 'my' ? myProjects : sharedProjects).length > 0 && (
-          <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-6">
-            {(activeTab === 'my' ? myProjects : sharedProjects).map((project) => (
+        {/* Projects Display */}
+        {!isLoading && !error && sortedProjects.length > 0 && (
+          viewMode === 'table' ? (
+            /* Table View */
+            <div className="card overflow-x-auto">
+              <table className="w-full">
+                <thead>
+                  <tr className="border-b border-border">
+                    <th 
+                      className="px-4 py-3 text-left text-sm font-semibold text-text cursor-pointer hover:bg-gray-50"
+                      onClick={() => handleSort('owner')}
+                    >
+                      User {sortField === 'owner' && (sortDirection === 'asc' ? '↑' : '↓')}
+                    </th>
+                    <th 
+                      className="px-4 py-3 text-left text-sm font-semibold text-text cursor-pointer hover:bg-gray-50"
+                      onClick={() => handleSort('created_at')}
+                    >
+                      Date {sortField === 'created_at' && (sortDirection === 'asc' ? '↑' : '↓')}
+                    </th>
+                    <th 
+                      className="px-4 py-3 text-left text-sm font-semibold text-text cursor-pointer hover:bg-gray-50"
+                      onClick={() => handleSort('name')}
+                    >
+                      Name {sortField === 'name' && (sortDirection === 'asc' ? '↑' : '↓')}
+                    </th>
+                    <th 
+                      className="px-4 py-3 text-left text-sm font-semibold text-text cursor-pointer hover:bg-gray-50"
+                      onClick={() => handleSort('title')}
+                    >
+                      Title {sortField === 'title' && (sortDirection === 'asc' ? '↑' : '↓')}
+                    </th>
+                    <th 
+                      className="px-4 py-3 text-left text-sm font-semibold text-text cursor-pointer hover:bg-gray-50"
+                      onClick={() => handleSort('total_chats')}
+                    >
+                      Total Chats {sortField === 'total_chats' && (sortDirection === 'asc' ? '↑' : '↓')}
+                    </th>
+                    <th 
+                      className="px-4 py-3 text-left text-sm font-semibold text-text cursor-pointer hover:bg-gray-50"
+                      onClick={() => handleSort('updated_at')}
+                    >
+                      Last Update {sortField === 'updated_at' && (sortDirection === 'asc' ? '↑' : '↓')}
+                    </th>
+                    <th className="px-4 py-3 text-left text-sm font-semibold text-text">Actions</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {sortedProjects.map((project) => (
+                    <tr 
+                      key={project.id} 
+                      className="border-b border-border hover:bg-gray-50 transition-colors cursor-pointer"
+                      onClick={() => handleProjectClick(project)}
+                    >
+                      <td className="px-4 py-3 text-sm text-text">
+                        {project.owner?.full_name || project.owner?.username || 'N/A'}
+                      </td>
+                      <td className="px-4 py-3 text-sm text-text-light">
+                        {new Date(project.created_at).toLocaleDateString('en-US', {
+                          month: 'short',
+                          day: 'numeric',
+                          year: 'numeric'
+                        })}
+                      </td>
+                      <td className="px-4 py-3 text-sm font-medium text-primary">
+                        {project.name}
+                      </td>
+                      <td className="px-4 py-3 text-sm text-text-light max-w-xs truncate" title={project.title}>
+                        {project.title || 'No queries yet'}
+                      </td>
+                      <td className="px-4 py-3 text-sm text-text font-medium">
+                        {project.total_chats ?? 0}
+                      </td>
+                      <td className="px-4 py-3 text-sm text-text-light">
+                        {new Date(project.updated_at).toLocaleDateString('en-US', {
+                          month: 'short',
+                          day: 'numeric',
+                          year: 'numeric',
+                          hour: '2-digit',
+                          minute: '2-digit'
+                        })}
+                      </td>
+                      <td className="px-4 py-3 text-sm" onClick={(e) => e.stopPropagation()}>
+                        <div className="flex items-center gap-2">
+                          {project.is_owner && (
+                            <>
+                              <button
+                                onClick={(e) => handleEditClick(e, project)}
+                                className="p-1 rounded hover:bg-gray-200 transition-colors"
+                                title="Edit project"
+                              >
+                                <Edit2 size={16} className="text-text-light hover:text-primary" />
+                              </button>
+                              <button
+                                onClick={(e) => handleShareClick(e, project)}
+                                className="p-1 rounded hover:bg-gray-200 transition-colors"
+                                title="Share project"
+                              >
+                                <Share2 size={16} className="text-text-light hover:text-primary" />
+                              </button>
+                            </>
+                          )}
+                        </div>
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          ) : (
+            /* Card View */
+            <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-6">
+              {sortedProjects.map((project) => (
               <div
                 key={project.id}
                 className="card hover:shadow-lg transition-all duration-300 group"
@@ -280,7 +486,7 @@ export default function CohortsPage() {
                     )}
                     <div className="flex items-center gap-2 text-sm text-text-light">
                       <MessageSquare size={16} />
-                      <span className="font-semibold">{project.message_count}</span>
+                      <span className="font-semibold">{project.total_chats ?? 0}</span>
                     </div>
                   </div>
                 </div>
@@ -293,6 +499,16 @@ export default function CohortsPage() {
                   {project.name}
                 </h3>
 
+                {/* Title */}
+                {project.title && (
+                  <div className="mb-3">
+                    <p className="text-xs font-semibold text-text-light uppercase mb-1">Title</p>
+                    <p className="text-sm text-text line-clamp-2">
+                      {project.title}
+                    </p>
+                  </div>
+                )}
+
                 {/* Description */}
                 {project.description && (
                   <p className="text-sm text-text-light mb-3 line-clamp-2">
@@ -300,13 +516,15 @@ export default function CohortsPage() {
                   </p>
                 )}
 
-                {/* Owner (for shared projects) */}
-                {!project.is_owner && project.owner && (
-                  <div className="flex items-center gap-2 mb-3 text-sm text-text-light">
-                    <UserIcon size={14} />
-                    <span>Owner: {project.owner.full_name || project.owner.username}</span>
-                  </div>
-                )}
+                {/* User/Owner */}
+                <div className="flex items-center gap-2 mb-3 text-sm text-text-light">
+                  <UserIcon size={14} />
+                  <span>
+                    {!project.is_owner && project.owner 
+                      ? `Owner: ${project.owner.full_name || project.owner.username}`
+                      : `User: ${project.owner?.full_name || project.owner?.username || 'N/A'}`}
+                  </span>
+                </div>
 
                 {/* Shared Users Avatars */}
                 {project.is_owner && project.shared_with.length > 0 && (
@@ -353,6 +571,7 @@ export default function CohortsPage() {
               </div>
             ))}
           </div>
+          )
         )}
 
         {/* Empty State */}
@@ -404,70 +623,81 @@ export default function CohortsPage() {
               </div>
 
               {/* Content */}
-              <div className="p-6 space-y-4 max-h-96 overflow-y-auto">
-                <p className="text-sm text-text-light mb-4">
-                  Select users to share this project with:
-                </p>
-
-                {/* User List */}
-                <div className="space-y-2">
-                  {availableUsers.map((user) => {
-                    const isSelected = selectedUserIds.includes(user.id);
-                    const isCurrentlyShared = shareProject.shared_with.some(u => u.id === user.id);
-                    
-                    return (
-                      <label
-                        key={user.id}
-                        className={`flex items-center gap-3 p-3 rounded-lg cursor-pointer transition-all border ${
-                          isSelected
-                            ? 'bg-primary bg-opacity-10 border-primary'
-                            : 'bg-white border-border hover:border-gray-300'
-                        }`}
-                      >
-                        <input
-                          type="checkbox"
-                          checked={isSelected}
-                          onChange={(e) => {
-                            if (e.target.checked) {
-                              setSelectedUserIds([...selectedUserIds, user.id]);
-                            } else {
-                              setSelectedUserIds(selectedUserIds.filter(id => id !== user.id));
-                            }
-                          }}
-                          disabled={isSharing}
-                          className="w-4 h-4 text-primary rounded"
-                        />
-                        <div className="w-10 h-10 rounded-full bg-primary text-white flex items-center justify-center text-sm font-semibold flex-shrink-0">
-                          {user.initials}
-                        </div>
-                        <div className="flex-1 min-w-0">
-                          <p className="text-sm font-semibold text-text">
-                            {user.full_name || user.username}
-                          </p>
-                          <p className="text-xs text-text-light truncate">{user.email}</p>
-                        </div>
-                        {isCurrentlyShared && (
-                          <button
-                            onClick={(e) => {
-                              e.stopPropagation();
-                              handleUnshare(user.id);
-                            }}
-                            disabled={isSharing}
-                            className="text-danger hover:text-danger-dark text-sm"
-                          >
-                            Remove
-                          </button>
-                        )}
-                      </label>
-                    );
-                  })}
+              <div className="p-6 space-y-6">
+                {/* Add User Section */}
+                <div>
+                  <p className="text-sm font-medium text-text mb-3">
+                    Add users to share with:
+                  </p>
+                  <div className="flex gap-2">
+                    <select
+                      value={selectedUserId || ''}
+                      onChange={(e) => setSelectedUserId(e.target.value ? Number(e.target.value) : null)}
+                      disabled={isSharing}
+                      className="flex-1 form-control"
+                    >
+                      <option value="">Select a user...</option>
+                      {availableUsers
+                        .filter(user => !selectedUserIds.includes(user.id))
+                        .map((user) => (
+                          <option key={user.id} value={user.id}>
+                            {user.full_name || user.username} ({user.email})
+                          </option>
+                        ))}
+                    </select>
+                    <Button
+                      onClick={handleAddUser}
+                      disabled={!selectedUserId || isSharing}
+                      variant="accent"
+                    >
+                      Add
+                    </Button>
+                  </div>
                 </div>
 
-                {availableUsers.length === 0 && (
-                  <p className="text-sm text-text-light text-center py-4">
-                    No other users available
+                {/* Shared Users List */}
+                <div>
+                  <p className="text-sm font-medium text-text mb-3">
+                    Users with access ({selectedUserIds.length}):
                   </p>
-                )}
+                  {selectedUserIds.length === 0 ? (
+                    <p className="text-sm text-text-light text-center py-4 border border-border rounded-lg">
+                      No users shared yet
+                    </p>
+                  ) : (
+                    <div className="space-y-2 max-h-64 overflow-y-auto">
+                      {selectedUserIds.map((userId) => {
+                        const user = availableUsers.find(u => u.id === userId);
+                        if (!user) return null;
+                        
+                        return (
+                          <div
+                            key={userId}
+                            className="flex items-center justify-between p-3 border border-border rounded-lg hover:bg-gray-50 transition-colors"
+                          >
+                            <div className="flex items-center gap-3 flex-1 min-w-0">
+                              <div className="flex-1 min-w-0">
+                                <p className="text-sm font-semibold text-text">
+                                  {user.full_name || user.username}
+                                </p>
+                                <p className="text-xs text-text-light truncate">{user.email}</p>
+                              </div>
+                            </div>
+                            <button
+                              onClick={() => {
+                                setSelectedUserIds(selectedUserIds.filter(id => id !== userId));
+                              }}
+                              disabled={isSharing}
+                              className="text-danger hover:text-danger-dark text-sm font-medium px-2"
+                            >
+                              Remove
+                            </button>
+                          </div>
+                        );
+                      })}
+                    </div>
+                  )}
+                </div>
               </div>
 
               {/* Footer */}
@@ -476,6 +706,7 @@ export default function CohortsPage() {
                   onClick={() => {
                     setShareProject(null);
                     setSelectedUserIds([]);
+                    setSelectedUserId(null);
                   }}
                   disabled={isSharing}
                   variant="secondary"
@@ -484,11 +715,11 @@ export default function CohortsPage() {
                 </Button>
                 <Button
                   onClick={handleShare}
-                  disabled={isSharing}
+                  disabled={isSharing || selectedUserIds.length === 0}
                   variant="primary"
                   loading={isSharing}
                 >
-                  {isSharing ? 'Sharing...' : 'Share'}
+                  {isSharing ? 'Saving...' : 'Save Changes'}
                 </Button>
               </div>
             </div>

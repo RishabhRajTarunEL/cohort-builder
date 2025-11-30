@@ -1,6 +1,6 @@
 'use client';
 
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
 import { useAuth } from '@/app/contexts/AuthContext';
 import { User, Mail, Building, Briefcase, Save, Key, Eye, EyeOff } from 'lucide-react';
@@ -16,10 +16,28 @@ export default function ProfilePage() {
   const [error, setError] = useState('');
   const [success, setSuccess] = useState('');
   const [formData, setFormData] = useState({
-    first_name: user?.first_name || '',
-    last_name: user?.last_name || '',
+    first_name: '',
+    last_name: '',
     polly_api_key: '',
   });
+
+  // Initialize form data when user is available
+  useEffect(() => {
+    if (user) {
+      setFormData({
+        first_name: user.first_name || '',
+        last_name: user.last_name || '',
+        polly_api_key: '',
+      });
+    }
+  }, [user]);
+
+  // Redirect to login if user is not authenticated
+  useEffect(() => {
+    if (!isLoading && !user) {
+      router.push('/login');
+    }
+  }, [user, isLoading, router]);
 
   if (isLoading) {
     return (
@@ -30,7 +48,6 @@ export default function ProfilePage() {
   }
 
   if (!user) {
-    router.push('/login');
     return null;
   }
 

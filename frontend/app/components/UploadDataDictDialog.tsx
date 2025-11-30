@@ -334,7 +334,7 @@ export default function UploadDataDictDialog({
           </Button>
           <Button
             onClick={handleUploadAndProcess}
-            disabled={(!dataDictState.file && !schemaKeysState.file) || anyUploading || allSuccess}
+            disabled={!!((dataDictState.file === null || schemaKeysState.file === null) || anyUploading || allSuccess)}
             variant="primary"
             loading={isProcessing}
           >

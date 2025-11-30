@@ -67,8 +67,8 @@ class CohortProjectListCreateView(APIView):
             # Get shared projects
             shared_projects = CohortProject.objects.filter(shared_with=request.user)
             
-            # Combine and deduplicate
-            all_projects = (owned_projects | shared_projects).distinct()
+            # Combine and deduplicate, prefetch messages for better performance
+            all_projects = (owned_projects | shared_projects).distinct().prefetch_related('messages')
             
             serializer = CohortProjectSerializer(all_projects, many=True, context={'request': request})
             return Response(serializer.data, status=status.HTTP_200_OK)
