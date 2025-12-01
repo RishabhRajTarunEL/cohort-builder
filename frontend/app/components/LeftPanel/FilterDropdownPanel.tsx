@@ -128,8 +128,18 @@ export default function FilterDropdownPanel({ projectId, isCollapsed: externalCo
     try {
       const result = await fetchFieldValues(projectId, tableName, fieldName, 100);
       // Handle both array of values or array of objects with value property
-      const values = result.values || [];
-      setFieldValues(prev => new Map(prev).set(key, values));
+      // Ensure we always get an array from the response
+      let values = [];
+      if (result && typeof result === 'object') {
+        if (Array.isArray(result.values)) {
+          values = result.values;
+        } else if (Array.isArray(result)) {
+          values = result;
+        }
+      }
+      // Ensure values is always an array
+      const valuesArray = Array.isArray(values) ? values : [];
+      setFieldValues(prev => new Map(prev).set(key, valuesArray));
     } catch (error) {
       console.error('Failed to load field values:', error);
     } finally {
@@ -207,49 +217,69 @@ export default function FilterDropdownPanel({ projectId, isCollapsed: externalCo
       // Handle numeric fields (int64, float64)
       else if (fieldType === 'int64' || fieldType === 'float64' || mapping.field_type === 'int64' || mapping.field_type === 'float64') {
         const value = mapping.value;
+        const operator = mapping.operator || '=';
+        
         if (typeof value === 'object' && value !== null && 'min' in value && 'max' in value) {
-          // BETWEEN range
-          setIntInputs(prev => {
-            const newMap = new Map(prev);
-            newMap.set(key, { min: value.min.toString(), max: value.max.toString() });
-            return newMap;
-          });
-          setFloatInputs(prev => {
-            const newMap = new Map(prev);
-            newMap.set(key, { min: value.min.toString(), max: value.max.toString() });
-            return newMap;
-          });
-        } else if (mapping.operator === '>=') {
-          // Minimum value
-          const numValue = typeof value === 'number' ? value : parseFloat(value);
+          // BETWEEN range - put both values
+          const updateInputs = (setter: React.Dispatch<React.SetStateAction<Map<string, { min: string; max: string }>>>) => {
+            setter(prev => {
+              const newMap = new Map(prev);
+              newMap.set(key, { min: value.min.toString(), max: value.max.toString() });
+              return newMap;
+            });
+          };
+          
           if (fieldType === 'int64' || mapping.field_type === 'int64') {
-            setIntInputs(prev => {
-              const newMap = new Map(prev);
-              newMap.set(key, { min: numValue.toString(), max: '' });
-              return newMap;
-            });
+            updateInputs(setIntInputs);
           } else {
-            setFloatInputs(prev => {
-              const newMap = new Map(prev);
-              newMap.set(key, { min: numValue.toString(), max: '' });
-              return newMap;
-            });
+            updateInputs(setFloatInputs);
           }
-        } else if (mapping.operator === '<=') {
-          // Maximum value
-          const numValue = typeof value === 'number' ? value : parseFloat(value);
-          if (fieldType === 'int64' || mapping.field_type === 'int64') {
-            setIntInputs(prev => {
-              const newMap = new Map(prev);
-              newMap.set(key, { min: '', max: numValue.toString() });
-              return newMap;
-            });
-          } else {
-            setFloatInputs(prev => {
-              const newMap = new Map(prev);
-              newMap.set(key, { min: '', max: numValue.toString() });
-              return newMap;
-            });
+        } else {
+          // Extract numeric value
+          const numValue = typeof value === 'number' ? value : (Array.isArray(value) ? value[0] : parseFloat(value));
+          
+          if (!isNaN(numValue) && numValue !== null && numValue !== undefined) {
+            const updateInputs = (setter: React.Dispatch<React.SetStateAction<Map<string, { min: string; max: string }>>>, minVal: string, maxVal: string) => {
+              setter(prev => {
+                const newMap = new Map(prev);
+                newMap.set(key, { min: minVal, max: maxVal });
+                return newMap;
+              });
+            };
+            
+            let minStr = '';
+            let maxStr = '';
+            
+            // Handle different operators
+            if (operator === '=' || operator === '==') {
+              // Equal: put value in both boxes
+              minStr = numValue.toString();
+              maxStr = numValue.toString();
+            } else if (operator === '>' || operator === '>=') {
+              // Greater than/equal: put value in MIN box
+              minStr = numValue.toString();
+              maxStr = '';
+            } else if (operator === '<' || operator === '<=') {
+              // Less than/equal: put value in MAX box
+              minStr = '';
+              maxStr = numValue.toString();
+            } else if (operator === 'BETWEEN' || operator.toLowerCase() === 'between') {
+              // BETWEEN should have already been handled above, but just in case
+              if (Array.isArray(value) && value.length === 2) {
+                minStr = value[0].toString();
+                maxStr = value[1].toString();
+              } else {
+                // Fallback to empty
+                minStr = '';
+                maxStr = '';
+              }
+            }
+            
+            if (fieldType === 'int64' || mapping.field_type === 'int64') {
+              updateInputs(setIntInputs, minStr, maxStr);
+            } else {
+              updateInputs(setFloatInputs, minStr, maxStr);
+            }
           }
         }
       }
@@ -690,8 +720,9 @@ export default function FilterDropdownPanel({ projectId, isCollapsed: externalCo
     const isLoadingValues = loadingValues.has(key);
 
     if (fieldType === 'object') {
-      const values = fieldValues.get(key) || [];
-      const filteredValues = values.filter((val: any) =>
+      const values = fieldValues.get(key);
+      const valuesArray = Array.isArray(values) ? values : [];
+      const filteredValues = valuesArray.filter((val: any) =>
         val.toString().toLowerCase().includes(searchTerm.toLowerCase())
       );
 

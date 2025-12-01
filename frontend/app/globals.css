@@ -164,15 +164,21 @@
   /* Set base font size to 14px (Xtract standard) */
   html {
     font-size: 14px;
+    height: 100%;
   }
-  
+
   html,
   body {
     @apply antialiased;
+    height: 100%;
   }
-  
+
   body {
     @apply text-text bg-background;
+  }
+
+  #__next {
+    height: 100%;
   }
   
   h1,

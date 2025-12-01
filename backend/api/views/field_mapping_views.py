@@ -448,7 +448,7 @@ class FieldMappingListCreateView(APIView):
             for m in mappings_list:
                 try:
                     mapping_data.append({
-                        'id': str(m.id),
+                    'id': str(m.id),
                         'table_name': m.table_name or '',
                         'field_name': m.field_name or '',
                         'field_type': m.field_type or 'object',

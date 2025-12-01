@@ -7,6 +7,8 @@ import DynamicCriterionComponent from '@/app/components/criteria/DynamicCriterio
 import ProgressiveCriteriaLayout from './ProgressiveCriteriaLayout';
 import { Button } from '@/app/components/ui';
 import Tag from '@/app/components/ui/Tag';
+import { useFieldMappings } from '@/app/contexts/FieldMappingContext';
+import { createFieldMapping as apiCreateFieldMapping, deleteFieldMapping as apiDeleteFieldMapping } from '@/app/lib/fieldMappingService';
 
 const API_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000/api';
 
@@ -69,6 +71,7 @@ export default function ConversationalChat({ projectId }: ConversationalChatProp
   const [currentStage, setCurrentStage] = useState<number>(0);
   const [accumulatedCriteria, setAccumulatedCriteria] = useState<any[]>([]);
   const [accumulatedFieldMappings, setAccumulatedFieldMappings] = useState<any[]>([]);
+  const { refreshMappings, fieldMappings: contextMappings } = useFieldMappings();
   
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
@@ -485,6 +488,470 @@ export default function ConversationalChat({ projectId }: ConversationalChatProp
     }));
   };
 
+  const applyConceptFilters = async (criteria: any[]) => {
+    if (!project) return;
+
+    setLoading(true);
+    
+    // Import useFieldMappings at the top level to use it here
+    // For now, we'll use the direct API calls to create field mappings
+
+    // Extract field mappings from criteria with concept mappings
+    const filtersToApply: any[] = [];
+
+    for (const criterion of criteria) {
+      const dbMappings = criterion.db_mappings || {};
+      
+      for (const [entity, mapping] of Object.entries(dbMappings)) {
+        const dbMapping = mapping as any;
+        const uiComponent = dbMapping.ui_component;
+        
+        if (!uiComponent || !dbMapping['table.field']) continue;
+
+        // Extract selected values from UI component config
+        const config = uiComponent.config || {};
+        const fieldType = dbMapping.field_data_type || 'object';
+        const isNumeric = fieldType === 'int64' || fieldType === 'float64';
+        
+        // Check if we have stored values from user interaction
+        const storedValueKey = `${criterion.id}_${entity}`;
+        const storedValue = criteriaValues[storedValueKey];
+        
+        console.log(`[Apply Filters] Processing ${entity} (${fieldType}, numeric: ${isNumeric}):`, {
+          storedValueKey,
+          storedValue,
+          configCurrentValue: config.current_value,
+          configCurrentOperator: config.current_operator,
+          configDefaultValue: config.default_value
+        });
+        
+        let operator: string;
+        let value: any;
+        let selectedValues: any[] = [];
+        
+        // Extract operator - prioritize storedValue, then config
+        operator = storedValue?.operator || config.current_operator;
+        
+        // Extract value - prioritize storedValue from user interaction
+        let extractedValue = storedValue?.value;
+        
+        if (extractedValue === undefined || extractedValue === null) {
+          // Fallback to config values
+          if (isNumeric) {
+            extractedValue = config.current_value !== undefined && config.current_value !== null 
+              ? config.current_value 
+              : (config.default_value !== undefined && config.default_value !== null ? config.default_value : undefined);
+          } else {
+            extractedValue = config.selected_values || config.current_values || config.value;
+          }
+        }
+        
+        console.log(`[Apply Filters] Extracted value for ${entity}:`, {
+          extractedValue,
+          extractedValueType: typeof extractedValue,
+          isArray: Array.isArray(extractedValue),
+          operator
+        });
+        
+        // Handle numeric fields
+        if (isNumeric) {
+          // Check if we have a valid value (including 0)
+          if (extractedValue === undefined || extractedValue === null) {
+            console.log(`[Apply Filters] Skipping numeric field ${entity} - no value found`);
+            continue; // Skip if no value
+          }
+          
+          console.log(`[Apply Filters] Processing numeric value for ${entity}:`, {
+            extractedValue,
+            extractedValueType: typeof extractedValue,
+            isArray: Array.isArray(extractedValue),
+            currentOperator: operator
+          });
+          
+          // Normalize numeric value format first, then determine operator
+          if (Array.isArray(extractedValue) && extractedValue.length === 2) {
+            // Array [min, max] format - typically means BETWEEN
+            const minVal = extractedValue[0];
+            const maxVal = extractedValue[1];
+            
+            // If both values are valid numbers, use BETWEEN
+            if (typeof minVal === 'number' && typeof maxVal === 'number' && !isNaN(minVal) && !isNaN(maxVal)) {
+              operator = 'BETWEEN';
+              value = { min: minVal, max: maxVal };
+            } else {
+              console.log(`[Apply Filters] Invalid array values for ${entity}:`, extractedValue);
+              continue;
+            }
+          } else if (typeof extractedValue === 'object' && extractedValue !== null && 'min' in extractedValue && 'max' in extractedValue) {
+            // Already in {min, max} format
+            const minVal = extractedValue.min;
+            const maxVal = extractedValue.max;
+            if (typeof minVal === 'number' && typeof maxVal === 'number' && !isNaN(minVal) && !isNaN(maxVal)) {
+              value = extractedValue;
+              operator = 'BETWEEN';
+            } else {
+              console.log(`[Apply Filters] Invalid object values for ${entity}:`, extractedValue);
+              continue;
+            }
+          } else if (typeof extractedValue === 'number') {
+            // Single numeric value (including 0)
+            if (isNaN(extractedValue)) {
+              console.log(`[Apply Filters] NaN value for ${entity}`);
+              continue;
+            }
+            value = extractedValue;
+            // Determine operator if not set
+            if (!operator) {
+              const operatorOptions = uiComponent.operator_options || [];
+              const defaultOp = operatorOptions.find((opt: any) => opt.value)?.value;
+              operator = defaultOp || '=';
+            }
+          } else if (typeof extractedValue === 'string') {
+            // Try to parse string as number
+            const parsed = parseFloat(extractedValue);
+            if (!isNaN(parsed)) {
+              value = parsed;
+              // Determine operator if not set
+              if (!operator) {
+                const operatorOptions = uiComponent.operator_options || [];
+                const defaultOp = operatorOptions.find((opt: any) => opt.value)?.value;
+                operator = defaultOp || '=';
+              }
+            } else {
+              console.log(`[Apply Filters] Cannot parse string as number for ${entity}:`, extractedValue);
+              continue;
+            }
+          } else {
+            console.log(`[Apply Filters] Unknown value type for numeric field ${entity}:`, typeof extractedValue, extractedValue);
+            continue;
+          }
+          
+          console.log(`[Apply Filters] Normalized numeric value for ${entity}:`, { value, operator });
+        } else {
+          // Non-numeric fields
+          if (!extractedValue) {
+            continue; // Skip if no value
+          }
+          
+          if (Array.isArray(extractedValue)) {
+            selectedValues = extractedValue;
+          } else {
+            selectedValues = [extractedValue];
+          }
+          
+          // Set operator for non-numeric
+          if (!operator) {
+            operator = selectedValues.length > 1 ? 'IN' : '=';
+          }
+        }
+
+        // Parse table.field to get table and field names
+        const [tableName, fieldName] = dbMapping['table.field'].split('.');
+        if (!tableName || !fieldName) continue;
+
+        // For numeric fields, ensure we have a value
+        if (isNumeric && (value === undefined || value === null)) {
+          console.log(`Skipping numeric field ${fieldName} - no value extracted`);
+          continue;
+        }
+        
+        // For non-numeric fields, ensure we have selected values
+        if (!isNumeric && selectedValues.length === 0) {
+          console.log(`Skipping non-numeric field ${fieldName} - no values extracted`);
+          continue;
+        }
+
+        console.log(`Adding filter for ${fieldName}:`, {
+          table_name: tableName,
+          field_name: fieldName,
+          field_type: fieldType,
+          values: isNumeric ? value : selectedValues,
+          operator: operator,
+          isNumeric
+        });
+
+        // Create filter object
+        filtersToApply.push({
+          table_name: tableName,
+          field_name: fieldName,
+          field_type: fieldType,
+          values: isNumeric ? value : selectedValues,
+          operator: operator,
+          table_field: dbMapping['table.field'],
+          entity: entity,
+          criterion_type: criterion.type || 'include'
+        });
+      }
+    }
+
+    console.log('Filters to apply:', filtersToApply);
+
+    if (filtersToApply.length === 0) {
+      console.log('No filters to apply - all filters were skipped');
+      setLoading(false);
+      return;
+    }
+
+    // Create a user message
+    const filterMessage = `Apply filters: ${filtersToApply.map(f => {
+      const isNumeric = f.field_type === 'int64' || f.field_type === 'float64';
+      if (isNumeric) {
+        const val = f.values;
+        if (typeof val === 'object' && val !== null && 'min' in val && 'max' in val) {
+          return `${f.field_name} is between ${val.min} and ${val.max}`;
+        } else if (f.operator === '>=') {
+          return `${f.field_name} >= ${val}`;
+        } else if (f.operator === '>') {
+          return `${f.field_name} > ${val}`;
+        } else if (f.operator === '<=') {
+          return `${f.field_name} <= ${val}`;
+        } else if (f.operator === '<') {
+          return `${f.field_name} < ${val}`;
+        } else if (f.operator === '=' || f.operator === '==') {
+          return `${f.field_name} = ${val}`;
+        } else {
+          return `${f.field_name} = ${val}`;
+        }
+      } else {
+        return `${f.field_name} is ${Array.isArray(f.values) ? f.values.join(', ') : f.values}`;
+      }
+    }).join(', ')}`;
+
+    const tempUserMsg: ChatMessage = {
+      id: `temp-user-${Date.now()}`,
+      role: 'user',
+      content: filterMessage,
+      timestamp: new Date().toISOString(),
+      status: 'success'
+    };
+    setMessages(prev => [...prev, tempUserMsg]);
+
+    // Add loading message
+    const loadingMsgId = `loading-${Date.now()}`;
+    const loadingMsg: ChatMessage = {
+      id: loadingMsgId,
+      role: 'assistant',
+      content: 'Applying filters...',
+      timestamp: new Date().toISOString(),
+      status: 'loading'
+    };
+    setMessages(prev => [...prev, loadingMsg]);
+
+    try {
+      const csrfToken = getCookie('csrftoken');
+      const headers: Record<string, string> = {
+        'Content-Type': 'application/json',
+      };
+      if (csrfToken) {
+        headers['X-CSRFToken'] = csrfToken;
+      }
+
+      // Create field mappings for each filter and save them to the database
+      const fieldMappingsToSend = [];
+      
+      for (const filter of filtersToApply) {
+        const isNumeric = filter.field_type === 'int64' || filter.field_type === 'float64';
+        let sqlCriterion = '';
+        let displayText = '';
+        let value: any;
+
+        console.log(`[Create Mapping] Processing filter for ${filter.field_name}:`, {
+          isNumeric,
+          values: filter.values,
+          valuesType: typeof filter.values,
+          operator: filter.operator,
+          table_field: filter.table_field
+        });
+
+        if (isNumeric) {
+          // Handle numeric fields
+          const numValue = filter.values;
+          
+          if (filter.operator === 'BETWEEN' || (typeof numValue === 'object' && numValue !== null && 'min' in numValue && 'max' in numValue)) {
+            // BETWEEN operator
+            const minVal = typeof numValue === 'object' && 'min' in numValue ? numValue.min : (Array.isArray(numValue) ? numValue[0] : null);
+            const maxVal = typeof numValue === 'object' && 'max' in numValue ? numValue.max : (Array.isArray(numValue) ? numValue[1] : null);
+            
+            console.log(`[Create Mapping] BETWEEN values:`, { minVal, maxVal, numValue });
+            
+            if (minVal !== undefined && maxVal !== undefined && minVal !== null && maxVal !== null) {
+              sqlCriterion = `${filter.table_field} BETWEEN ${minVal} AND ${maxVal}`;
+              displayText = `${filter.field_name} between ${minVal} and ${maxVal}`;
+              value = { min: minVal, max: maxVal };
+            } else {
+              console.error(`[Create Mapping] Invalid BETWEEN values for ${filter.field_name}:`, { minVal, maxVal });
+            }
+          } else if (filter.operator === '>=') {
+            // Greater than or equal
+            const numVal = typeof numValue === 'number' ? numValue : (Array.isArray(numValue) ? numValue[0] : (typeof numValue === 'string' ? parseFloat(numValue) : numValue));
+            if (typeof numVal === 'number' && !isNaN(numVal)) {
+              sqlCriterion = `${filter.table_field} >= ${numVal}`;
+              displayText = `${filter.field_name} >= ${numVal}`;
+              value = numVal;
+            } else {
+              console.error(`[Create Mapping] Invalid >= value for ${filter.field_name}:`, numVal);
+            }
+          } else if (filter.operator === '>') {
+            // Greater than
+            const numVal = typeof numValue === 'number' ? numValue : (Array.isArray(numValue) ? numValue[0] : (typeof numValue === 'string' ? parseFloat(numValue) : numValue));
+            if (typeof numVal === 'number' && !isNaN(numVal)) {
+              sqlCriterion = `${filter.table_field} > ${numVal}`;
+              displayText = `${filter.field_name} > ${numVal}`;
+              value = numVal;
+            } else {
+              console.error(`[Create Mapping] Invalid > value for ${filter.field_name}:`, numVal);
+            }
+          } else if (filter.operator === '<=') {
+            // Less than or equal
+            const numVal = typeof numValue === 'number' ? numValue : (Array.isArray(numValue) ? numValue[0] : (typeof numValue === 'string' ? parseFloat(numValue) : numValue));
+            if (typeof numVal === 'number' && !isNaN(numVal)) {
+              sqlCriterion = `${filter.table_field} <= ${numVal}`;
+              displayText = `${filter.field_name} <= ${numVal}`;
+              value = numVal;
+            } else {
+              console.error(`[Create Mapping] Invalid <= value for ${filter.field_name}:`, numVal);
+            }
+          } else if (filter.operator === '<') {
+            // Less than
+            const numVal = typeof numValue === 'number' ? numValue : (Array.isArray(numValue) ? numValue[0] : (typeof numValue === 'string' ? parseFloat(numValue) : numValue));
+            if (typeof numVal === 'number' && !isNaN(numVal)) {
+              sqlCriterion = `${filter.table_field} < ${numVal}`;
+              displayText = `${filter.field_name} < ${numVal}`;
+              value = numVal;
+            } else {
+              console.error(`[Create Mapping] Invalid < value for ${filter.field_name}:`, numVal);
+            }
+          } else if (filter.operator === '=' || filter.operator === '==') {
+            // Equals
+            const numVal = typeof numValue === 'number' ? numValue : (Array.isArray(numValue) ? numValue[0] : (typeof numValue === 'string' ? parseFloat(numValue) : numValue));
+            if (typeof numVal === 'number' && !isNaN(numVal)) {
+              sqlCriterion = `${filter.table_field} = ${numVal}`;
+              displayText = `${filter.field_name} = ${numVal}`;
+              value = numVal;
+            } else {
+              console.error(`[Create Mapping] Invalid = value for ${filter.field_name}:`, numVal);
+            }
+          } else {
+            // Default: equals (fallback)
+            const numVal = typeof numValue === 'number' ? numValue : (Array.isArray(numValue) ? numValue[0] : (typeof numValue === 'string' ? parseFloat(numValue) : numValue));
+            if (typeof numVal === 'number' && !isNaN(numVal)) {
+              sqlCriterion = `${filter.table_field} = ${numVal}`;
+              displayText = `${filter.field_name} = ${numVal}`;
+              value = numVal;
+              // Update operator to '=' if not set
+              filter.operator = '=';
+            } else {
+              console.error(`[Create Mapping] Invalid default value for ${filter.field_name}:`, numVal);
+            }
+          }
+        } else {
+          // Handle non-numeric fields (object/string)
+          const values = Array.isArray(filter.values) ? filter.values : [filter.values];
+          
+          if (filter.operator === 'IN' || values.length > 1) {
+            sqlCriterion = `${filter.table_field} IN (${values.map((v: any) => `'${v}'`).join(', ')})`;
+            displayText = `${filter.field_name}: ${values.join(', ')}`;
+            value = values;
+          } else {
+            sqlCriterion = `${filter.table_field} = '${values[0]}'`;
+            displayText = `${filter.field_name}: ${values[0]}`;
+            value = values.length === 1 ? values[0] : values;
+          }
+        }
+
+        if (!sqlCriterion) continue; // Skip if we couldn't generate SQL
+
+        const mappingData = {
+          table_name: filter.table_name,
+          field_name: filter.field_name,
+          field_type: filter.field_type,
+          concept: filter.entity,
+          operator: filter.operator,
+          value: value,
+          sql_criterion: sqlCriterion,
+          display_text: displayText,
+          source: 'user' as const,
+          status: 'draft' as const,
+        };
+
+        // Delete existing mappings for this field first (to replace them)
+        const existingMappings = contextMappings.filter(
+          (m: any) => m.table_name === filter.table_name && 
+                      m.field_name === filter.field_name && 
+                      m.source === 'user'
+        );
+        
+        for (const existingMapping of existingMappings) {
+          try {
+            await apiDeleteFieldMapping(project.id, existingMapping.id.toString());
+          } catch (error) {
+            console.error('Failed to delete existing mapping:', error);
+          }
+        }
+
+        // Create new field mapping
+        try {
+          await apiCreateFieldMapping(project.id, mappingData);
+          fieldMappingsToSend.push(mappingData);
+        } catch (error) {
+          console.error('Failed to create field mapping:', error);
+        }
+      }
+
+      // Refresh mappings so the left panel updates
+      await refreshMappings();
+
+      // Send to agent to update criteria
+      const response = await fetch(`${API_URL}/chat/conversational`, {
+        method: 'POST',
+        headers,
+        credentials: 'include',
+        body: JSON.stringify({
+          project_id: project.id,
+          message: filterMessage,
+          field_mappings: fieldMappingsToSend,
+        }),
+      });
+
+      if (!response.ok) {
+        const errorText = await response.text();
+        throw new Error(`HTTP error! status: ${response.status} - ${errorText}`);
+      }
+
+      const data = await response.json();
+
+      // Replace loading message with actual response
+      setMessages(prev =>
+        prev.filter(m => m.id !== loadingMsgId).concat({
+          id: data.assistant_message_id?.toString() || `assistant-${Date.now()}`,
+          role: 'assistant',
+          content: data.response_text || data.response || 'Filters applied successfully',
+          ui_components: data.ui_components,
+          timestamp: data.timestamp || new Date().toISOString(),
+          next_prompt: data.next_prompt,
+          status: 'success',
+          metadata: data.metadata
+        })
+      );
+
+    } catch (error) {
+      console.error('Error applying concept filters:', error);
+      
+      setMessages(prev =>
+        prev.filter(m => m.id !== loadingMsgId).concat({
+          id: `error-${Date.now()}`,
+          role: 'system',
+          content: 'Failed to apply filters. Please try again.',
+          timestamp: new Date().toISOString(),
+          status: 'error',
+          error_message: error instanceof Error ? error.message : 'Unknown error'
+        })
+      );
+    } finally {
+      setLoading(false);
+    }
+  };
+
   const renderUIComponent = (component: any, message: ChatMessage) => {
     if (!component) return null;
 
@@ -577,6 +1044,7 @@ export default function ConversationalChat({ projectId }: ConversationalChatProp
             });
           }}
           onApplyFieldMappings={applyFieldMappings}
+          onApplyConceptFilters={applyConceptFilters}
           fieldMappingChanges={fieldMappingChanges}
           disabled={loading}
         />
@@ -587,7 +1055,7 @@ export default function ConversationalChat({ projectId }: ConversationalChatProp
 
       case 'sql_preview':
         return (
-          <div className="my-3 p-4 bg-purple-50 border border-purple-200 rounded-lg">
+          <div className="my-3 p-4 bg-purple-50 border border-purple-200 rounded-lg w-[70%]">
             <h4 className="text-sm font-semibold text-purple-900 mb-2">Generated SQL Query</h4>
             <SQLPreview
               sql={component.data?.sql_query || ''}
@@ -744,14 +1212,6 @@ export default function ConversationalChat({ projectId }: ConversationalChatProp
               <h3 className="text-sm font-semibold text-gray-900">{project.name}</h3>
               <p className="text-xs text-gray-500">{project.atlas_name}</p>
             </div>
-            <div className="flex items-center gap-2">
-              {loading && (
-                <div className="flex items-center gap-1 text-xs text-gray-500">
-                  <Loader2 className="w-3 h-3 animate-spin" />
-                  <span>Processing...</span>
-                </div>
-              )}
-            </div>
           </div>
         </div>
       )}
@@ -865,6 +1325,7 @@ export default function ConversationalChat({ projectId }: ConversationalChatProp
                               }));
                             }}
                             onApplyFieldMappings={applyFieldMappings}
+                            onApplyConceptFilters={applyConceptFilters}
                             fieldMappingChanges={fieldMappingChanges}
                             disabled={loading}
                           />
@@ -918,9 +1379,6 @@ export default function ConversationalChat({ projectId }: ConversationalChatProp
             )}
           </button>
         </div>
-        {loading && (
-          <p className="text-xs text-gray-500 mt-2">Agent is processing your request...</p>
-        )}
       </div>
     </div>
   );

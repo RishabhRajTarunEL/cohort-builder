@@ -12,7 +12,9 @@ export default function LayoutWrapper({ children }: { children: React.ReactNode 
   return (
     <>
       {showHeader && <Header />}
+      <div className="h-[calc(100vh-2.5rem)] flex flex-col">
       {children}
+      </div>
     </>
   );
 }

@@ -13,7 +13,7 @@ export default function ChatPage() {
   
   return (
     <FieldMappingProvider>
-      <div className="flex h-[calc(100vh-4rem)] w-screen overflow-hidden bg-white">
+      <div className="flex h-full w-full overflow-hidden bg-white">
       {/* Left Panel - 20% (Split into two sections) */}
       <div className="w-[20%] border-r border-border bg-white flex flex-col">
         {/* Filter Dropdowns - Collapsible */}

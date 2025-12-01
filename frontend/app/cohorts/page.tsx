@@ -458,7 +458,7 @@ export default function CohortsPage() {
             </div>
           ) : (
             /* Card View */
-            <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-6">
+          <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-6">
               {sortedProjects.map((project) => (
               <div
                 key={project.id}
@@ -466,7 +466,7 @@ export default function CohortsPage() {
                 onClick={() => handleProjectClick(project)}
               >
                 {/* Icon and Actions */}
-                <div className="flex items-start justify-between mb-5">
+                <div className="flex items-start justify-between">
                   <div 
                     onClick={() => handleProjectClick(project)}
                     className="w-14 h-14 rounded-lg flex items-center justify-center transition-transform group-hover:scale-110 cursor-pointer"
@@ -492,8 +492,8 @@ export default function CohortsPage() {
                         </button>
                       </>
                     )}
-                    <div className="flex items-center gap-2 text-sm text-text-light">
-                      <MessageSquare size={16} />
+                  <div className="flex items-center gap-2 text-sm text-text-light">
+                    <MessageSquare size={16} />
                       <span className="font-semibold">{project.total_chats ?? 0}</span>
                     </div>
                   </div>
@@ -501,10 +501,12 @@ export default function CohortsPage() {
 
                 {/* Title */}
                 {project.title && (
-                  <div className="mb-3">
-                    <Tag variant="blue" style="light" size="sm" className="line-clamp-2">
-                      {project.title}
-                    </Tag>
+                  <div className="mb-3 w-full overflow-hidden">
+                    <div className="inline-block max-w-full">
+                      <Tag variant="blue" style="light" size="sm">
+                        {project.title}
+                      </Tag>
+                    </div>
                   </div>
                 )}
                 {/* Project Name */}
@@ -526,9 +528,7 @@ export default function CohortsPage() {
                 <div className="flex items-center gap-2 mb-3 text-sm text-text-light">
                   <UserIcon size={14} />
                   <span>
-                    {!project.is_owner && project.owner 
-                      ? `Owner: ${project.owner.full_name || project.owner.username}`
-                      : `User: ${project.owner?.full_name || project.owner?.username || 'N/A'}`}
+                    {`${project.owner.full_name || project.owner.username}`}
                   </span>
                 </div>
 
@@ -595,13 +595,13 @@ export default function CohortsPage() {
                 : 'Projects shared with you will appear here.'}
             </p>
             {activeTab === 'my' && (
-              <Button
-                onClick={() => router.push('/dashboard')}
-                variant="accent"
-                className="shadow-lg"
-              >
-                Go to Dashboard
-              </Button>
+            <Button
+              onClick={() => router.push('/dashboard')}
+              variant="accent"
+              className="shadow-lg"
+            >
+              Go to Dashboard
+            </Button>
             )}
           </div>
         )}

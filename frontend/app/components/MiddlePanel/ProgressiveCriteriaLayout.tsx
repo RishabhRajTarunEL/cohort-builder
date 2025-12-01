@@ -14,6 +14,7 @@ interface ProgressiveCriteriaLayoutProps {
   onValueChange?: (criterionId: string, entity: string, operator: string, value: any) => void;
   onFieldMappingChange?: (mappingIndex: number, selectedField: string) => void;
   onApplyFieldMappings?: (mappings: any[]) => void;
+  onApplyConceptFilters?: (criteria: any[]) => void;
   fieldMappingChanges?: { [key: string]: string };
   disabled?: boolean;
 }
@@ -26,6 +27,7 @@ export default function ProgressiveCriteriaLayout({
   onValueChange,
   onFieldMappingChange,
   onApplyFieldMappings,
+  onApplyConceptFilters,
   fieldMappingChanges = {},
   disabled = false,
 }: ProgressiveCriteriaLayoutProps) {
@@ -240,6 +242,22 @@ export default function ProgressiveCriteriaLayout({
             size="sm"
           >
             Reset
+          </Button>
+        </div>
+      )}
+
+      {/* Apply Filters Button - Show when concept mapping is visible (stage 2+) */}
+      {showConceptMapping && onApplyConceptFilters && criteria.some((c: any) => 
+        Object.values(c.db_mappings || {}).some((m: any) => m.ui_component)
+      ) && (
+        <div className="flex gap-2 justify-between mt-4">
+          <Button
+            variant="primary"
+            onClick={() => onApplyConceptFilters(criteria)}
+            disabled={disabled}
+            size="sm"
+          >
+            Apply Filters
           </Button>
         </div>
       )}
