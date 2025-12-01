@@ -13,13 +13,42 @@ import {
   FieldInfo,
 } from '@/app/lib/fieldMappingService';
 
-interface FilterDropdownPanelProps {
-  projectId?: number;
+const API_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000/api';
+
+// Helper to get CSRF token
+function getCookie(name: string): string | null {
+  if (typeof document === 'undefined') return null;
+  const value = `; ${document.cookie}`;
+  const parts = value.split(`; ${name}=`);
+  if (parts.length === 2) {
+    return parts.pop()?.split(';').shift() || null;
+  }
+  return null;
 }
 
-export default function FilterDropdownPanel({ projectId }: FilterDropdownPanelProps) {
+interface FilterDropdownPanelProps {
+  projectId?: number;
+  isCollapsed?: boolean;
+  onCollapseChange?: (collapsed: boolean) => void;
+}
+
+export default function FilterDropdownPanel({ projectId, isCollapsed: externalCollapsed, onCollapseChange }: FilterDropdownPanelProps) {
   const { filters, addFilters } = useFilters();
   const { fieldMappings, getAgentMappings, getConfirmedMappings, refreshMappings, deleteFieldMapping } = useFieldMappings();
+  
+  const [internalCollapsed, setInternalCollapsed] = useState(false);
+  
+  // Use external collapse state if provided, otherwise use internal state
+  const isSectionCollapsed = externalCollapsed !== undefined ? externalCollapsed : internalCollapsed;
+  
+  const handleCollapseToggle = () => {
+    const newCollapsed = !isSectionCollapsed;
+    if (onCollapseChange) {
+      onCollapseChange(newCollapsed);
+    } else {
+      setInternalCollapsed(newCollapsed);
+    }
+  };
   
   // State for lazy-loaded data
   const [tables, setTables] = useState<TableInfo[]>([]);
@@ -48,6 +77,7 @@ export default function FilterDropdownPanel({ projectId }: FilterDropdownPanelPr
       loadTables();
     }
   }, [projectId]);
+
 
   const loadTables = async () => {
     if (!projectId) return;
@@ -144,34 +174,176 @@ export default function FilterDropdownPanel({ projectId }: FilterDropdownPanelPr
     });
   };
 
-  // Initialize selected values based on existing field mappings
-  const initializeSelectedValuesFromMappings = useCallback((tableName: string, fieldName: string) => {
+  // Initialize selected values based on existing field mappings (both user and agent created)
+  const initializeSelectedValuesFromMappings = useCallback((tableName: string, fieldName: string, fieldType?: string) => {
     const key = getFieldKey(tableName, fieldName);
+    // Check ALL field mappings regardless of source (user or agent)
     const existingMappings = fieldMappings.filter(
       m => m.table_name === tableName && m.field_name === fieldName
     );
 
     if (existingMappings.length > 0) {
-      const appliedValues = new Set<string>();
-      existingMappings.forEach(mapping => {
-        if (Array.isArray(mapping.value)) {
-          mapping.value.forEach((v: any) => appliedValues.add(v.toString()));
-        } else if (mapping.value !== null && mapping.value !== undefined) {
-          appliedValues.add(mapping.value.toString());
-        }
-      });
+      const mapping = existingMappings[0]; // Use the most recent mapping
       
-      if (appliedValues.size > 0) {
-        setSelectedValues(prev => {
-          const newMap = new Map(prev);
-          newMap.set(key, appliedValues);
-          return newMap;
+      // Handle object type fields (checkboxes)
+      if (fieldType === 'object' || !fieldType || mapping.field_type === 'object') {
+        const appliedValues = new Set<string>();
+        existingMappings.forEach(m => {
+          if (Array.isArray(m.value)) {
+            m.value.forEach((v: any) => appliedValues.add(v.toString()));
+          } else if (m.value !== null && m.value !== undefined) {
+            appliedValues.add(m.value.toString());
+          }
         });
+        
+        if (appliedValues.size > 0) {
+          setSelectedValues(prev => {
+            const newMap = new Map(prev);
+            newMap.set(key, appliedValues);
+            return newMap;
+          });
+        }
+      }
+      // Handle numeric fields (int64, float64)
+      else if (fieldType === 'int64' || fieldType === 'float64' || mapping.field_type === 'int64' || mapping.field_type === 'float64') {
+        const value = mapping.value;
+        if (typeof value === 'object' && value !== null && 'min' in value && 'max' in value) {
+          // BETWEEN range
+          setIntInputs(prev => {
+            const newMap = new Map(prev);
+            newMap.set(key, { min: value.min.toString(), max: value.max.toString() });
+            return newMap;
+          });
+          setFloatInputs(prev => {
+            const newMap = new Map(prev);
+            newMap.set(key, { min: value.min.toString(), max: value.max.toString() });
+            return newMap;
+          });
+        } else if (mapping.operator === '>=') {
+          // Minimum value
+          const numValue = typeof value === 'number' ? value : parseFloat(value);
+          if (fieldType === 'int64' || mapping.field_type === 'int64') {
+            setIntInputs(prev => {
+              const newMap = new Map(prev);
+              newMap.set(key, { min: numValue.toString(), max: '' });
+              return newMap;
+            });
+          } else {
+            setFloatInputs(prev => {
+              const newMap = new Map(prev);
+              newMap.set(key, { min: numValue.toString(), max: '' });
+              return newMap;
+            });
+          }
+        } else if (mapping.operator === '<=') {
+          // Maximum value
+          const numValue = typeof value === 'number' ? value : parseFloat(value);
+          if (fieldType === 'int64' || mapping.field_type === 'int64') {
+            setIntInputs(prev => {
+              const newMap = new Map(prev);
+              newMap.set(key, { min: '', max: numValue.toString() });
+              return newMap;
+            });
+          } else {
+            setFloatInputs(prev => {
+              const newMap = new Map(prev);
+              newMap.set(key, { min: '', max: numValue.toString() });
+              return newMap;
+            });
+          }
+        }
       }
     }
   }, [fieldMappings]);
 
+  // Sync checkboxes and inputs when field mappings change (from agent or user)
+  useEffect(() => {
+    // Re-initialize selected values for all currently expanded fields
+    expandedFields.forEach(fieldKey => {
+      const [tableName, fieldName] = fieldKey.split('.');
+      if (tableName && fieldName) {
+        // Get field type from tableFields if available
+        const fields = tableFields.get(tableName) || [];
+        const fieldInfo = fields.find(f => f.field_name === fieldName);
+        const fieldType = fieldInfo?.field_type;
+        initializeSelectedValuesFromMappings(tableName, fieldName, fieldType);
+      }
+    });
+  }, [fieldMappings, expandedFields, initializeSelectedValuesFromMappings, tableFields]);
+
   const getFieldKey = (tableName: string, fieldName: string) => `${tableName}.${fieldName}`;
+
+  // Send filter update to agent to update criteria
+  const sendFilterUpdateToAgent = async (
+    tableName: string,
+    fieldName: string,
+    fieldType: string,
+    value: any,
+    operator: string,
+    sqlCriterion: string
+  ) => {
+    if (!projectId) return;
+
+    try {
+      const csrfToken = getCookie('csrftoken');
+      const headers: Record<string, string> = {
+        'Content-Type': 'application/json',
+      };
+      if (csrfToken) {
+        headers['X-CSRFToken'] = csrfToken;
+      }
+
+      // Format the filter as a natural language message for the agent
+      let filterMessage = '';
+      if (fieldType === 'object') {
+        const values = Array.isArray(value) ? value : [value];
+        filterMessage = `Apply filter: ${fieldName} ${operator === 'IN' ? 'is one of' : 'is'} ${values.join(', ')}`;
+      } else if (fieldType === 'int64' || fieldType === 'float64') {
+        if (operator === 'BETWEEN' && typeof value === 'object' && value.min !== undefined && value.max !== undefined) {
+          filterMessage = `Apply filter: ${fieldName} is between ${value.min} and ${value.max}`;
+        } else if (operator === '>=') {
+          filterMessage = `Apply filter: ${fieldName} is at least ${value}`;
+        } else if (operator === '<=') {
+          filterMessage = `Apply filter: ${fieldName} is at most ${value}`;
+        } else {
+          filterMessage = `Apply filter: ${fieldName} ${operator} ${value}`;
+        }
+      }
+
+      // Get all current field mappings to send to agent
+      const allMappings = fieldMappings.map(m => ({
+        table_name: m.table_name,
+        field_name: m.field_name,
+        field_type: m.field_type,
+        concept: m.concept,
+        operator: m.operator,
+        value: m.value,
+        sql_criterion: m.sql_criterion,
+        display_text: m.display_text,
+        source: m.source,
+        status: m.status,
+      }));
+
+      // Send to agent
+      const response = await fetch(`${API_URL}/chat/conversational`, {
+        method: 'POST',
+        headers,
+        credentials: 'include',
+        body: JSON.stringify({
+          project_id: projectId,
+          message: filterMessage,
+          field_mappings: allMappings, // Send all current mappings
+        }),
+      });
+
+      if (!response.ok) {
+        console.error('Failed to send filter update to agent:', response.status);
+      }
+    } catch (error) {
+      console.error('Error sending filter update to agent:', error);
+      // Don't throw - filter is still saved, just agent sync failed
+    }
+  };
 
   const updateSearchTerm = (key: string, term: string) => {
     setSearchTerms(prev => new Map(prev).set(key, term));
@@ -269,6 +441,9 @@ export default function FilterDropdownPanel({ projectId }: FilterDropdownPanelPr
 
         // Refresh mappings to get the latest state
         await refreshMappings();
+
+        // Send filter update to agent
+        await sendFilterUpdateToAgent(tableName, fieldName, fieldType, values, operator, sqlCriterion);
 
         // Also add to legacy filter context for backward compatibility
         const newFilters = values.map(value => ({
@@ -371,6 +546,9 @@ export default function FilterDropdownPanel({ projectId }: FilterDropdownPanelPr
         // Refresh mappings to get the latest state
         await refreshMappings();
 
+        // Send filter update to agent
+        await sendFilterUpdateToAgent(tableName, fieldName, fieldType, value, operator, criterion);
+
         // Add to legacy context
         const newFilter = {
           id: `filter-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`,
@@ -471,6 +649,9 @@ export default function FilterDropdownPanel({ projectId }: FilterDropdownPanelPr
 
         // Refresh mappings to get the latest state
         await refreshMappings();
+
+        // Send filter update to agent
+        await sendFilterUpdateToAgent(tableName, fieldName, fieldType, value, operator, criterion);
 
         const newFilter = {
           id: `filter-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`,
@@ -717,25 +898,40 @@ export default function FilterDropdownPanel({ projectId }: FilterDropdownPanelPr
 
   return (
     <div className="flex flex-col h-full">
-      <div className="sticky top-0 bg-white border-b p-4 z-10" style={{ borderColor: '#6B7280' }}>
-        <div className="flex items-center gap-2">
-          <FilterIcon className="w-5 h-5" style={{ color: '#8E42EE' }} />
-          <h3 className="font-semibold" style={{ color: '#111827' }}>
-            Add Filters
-          </h3>
-        </div>
-        {loadingTables ? (
-          <p className="text-xs mt-1" style={{ color: '#6B7280' }}>
-            Loading tables...
-          </p>
-        ) : (
-          <p className="text-xs mt-1" style={{ color: '#6B7280' }}>
-            {tables.length} tables available
-          </p>
+      <div className="sticky top-0 bg-white border-b border-gray-200 p-4 z-10">
+        <button
+          onClick={handleCollapseToggle}
+          className="w-full flex items-center justify-between gap-2 hover:opacity-80 transition-opacity"
+        >
+          <div className="flex items-center gap-2">
+            {isSectionCollapsed ? (
+              <ChevronRight className="w-4 h-4" style={{ color: '#6B7280' }} />
+            ) : (
+              <ChevronDown className="w-4 h-4" style={{ color: '#6B7280' }} />
+            )}
+            <FilterIcon className="w-5 h-5" style={{ color: '#8E42EE' }} />
+            <h3 className="font-semibold" style={{ color: '#111827' }}>
+              Add Filters
+            </h3>
+          </div>
+        </button>
+        {!isSectionCollapsed && (
+          <>
+            {loadingTables ? (
+              <p className="text-xs mt-1 ml-6" style={{ color: '#6B7280' }}>
+                Loading tables...
+              </p>
+            ) : (
+              <p className="text-xs mt-1 ml-6" style={{ color: '#6B7280' }}>
+                {tables.length} tables available
+              </p>
+            )}
+          </>
         )}
       </div>
 
-      <div className="flex-1 overflow-y-auto p-4">
+      {!isSectionCollapsed && (
+        <div className="flex-1 overflow-y-auto p-4">
         {/* Agent-finalized mappings section */}
         {confirmedMappings.length > 0 && (
           <div className="mb-4">
@@ -777,7 +973,7 @@ export default function FilterDropdownPanel({ projectId }: FilterDropdownPanelPr
                 </div>
               ))}
             </div>
-            <div className="border-b mt-4 mb-4" style={{ borderColor: '#E5E7EB' }} />
+            <div className="border-b border-gray-200 mt-4 mb-4" />
           </div>
         )}
         {loadingTables ? (
@@ -820,7 +1016,7 @@ export default function FilterDropdownPanel({ projectId }: FilterDropdownPanelPr
                   </button>
 
                   {isExpanded && (
-                    <div className="border-t" style={{ borderColor: '#6B728040' }}>
+                    <div className="border-t border-gray-200">
                       {isLoadingFields ? (
                         <div className="flex items-center justify-center py-6">
                           <Loader2 className="w-6 h-6 animate-spin" style={{ color: '#8E42EE' }} />
@@ -862,7 +1058,7 @@ export default function FilterDropdownPanel({ projectId }: FilterDropdownPanelPr
                                 </button>
 
                                 {isFieldExpanded && (
-                                  <div className="bg-gray-50 border-t p-3" style={{ borderColor: '#e5e7eb' }}>
+                                  <div className="bg-gray-50 border-t border-gray-200 p-3">
                                     {renderFieldInput(table.table_name, field.field_name, field.field_type)}
                                   </div>
                                 )}
@@ -878,7 +1074,8 @@ export default function FilterDropdownPanel({ projectId }: FilterDropdownPanelPr
             })}
           </div>
         )}
-      </div>
+        </div>
+      )}
     </div>
   );
 }

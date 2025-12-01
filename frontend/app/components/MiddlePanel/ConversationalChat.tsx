@@ -4,6 +4,7 @@ import React, { useState, useRef, useEffect, useCallback } from 'react';
 import { ArrowRight, User, Bot, Loader2, AlertCircle, CheckCircle, XCircle, Clock } from 'lucide-react';
 import { CriteriaChips, SQLPreview, QueryResults } from '@/app/components/criteria';
 import DynamicCriterionComponent from '@/app/components/criteria/DynamicCriterionComponent';
+import ProgressiveCriteriaLayout from './ProgressiveCriteriaLayout';
 import { Button } from '@/app/components/ui';
 import Tag from '@/app/components/ui/Tag';
 
@@ -65,6 +66,9 @@ export default function ConversationalChat({ projectId }: ConversationalChatProp
   const [projectError, setProjectError] = useState<string | null>(null);
   const [criteriaValues, setCriteriaValues] = useState<{ [key: string]: any }>({});
   const [fieldMappingChanges, setFieldMappingChanges] = useState<{ [key: string]: string }>({});
+  const [currentStage, setCurrentStage] = useState<number>(0);
+  const [accumulatedCriteria, setAccumulatedCriteria] = useState<any[]>([]);
+  const [accumulatedFieldMappings, setAccumulatedFieldMappings] = useState<any[]>([]);
   
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
@@ -137,16 +141,62 @@ export default function ConversationalChat({ projectId }: ConversationalChatProp
           const data = await response.json();
           
           // Convert history to chat messages
-          const chatMessages: ChatMessage[] = data.messages.reverse().map((msg: any) => ({
-            id: msg.id.toString(),
-            role: msg.role,
-            content: msg.content,
-            ui_components: msg.metadata?.ui_components,
-            timestamp: msg.created_at,
-            next_prompt: msg.metadata?.next_prompt,
-            status: 'success',
-            metadata: msg.metadata
-          }));
+          const chatMessages: ChatMessage[] = data.messages.reverse().map((msg: any) => {
+            // Extract ui_components from various possible locations
+            // Check direct property first, then metadata
+            let uiComponents = msg.ui_components;
+            if (!uiComponents && msg.metadata) {
+              uiComponents = msg.metadata.ui_components || msg.metadata.metadata?.ui_components;
+            }
+            
+            // Extract stage from various locations
+            const stage = msg.stage !== undefined 
+              ? msg.stage 
+              : msg.metadata?.stage !== undefined
+                ? msg.metadata.stage
+                : msg.metadata?.metadata?.stage !== undefined
+                  ? msg.metadata.metadata.stage
+                  : 0;
+            
+            // Build metadata object with all nested data
+            const metadata = {
+              ...(msg.metadata || {}),
+              // Ensure we have criteria if it exists in nested metadata
+              criteria: msg.metadata?.criteria || msg.metadata?.metadata?.criteria,
+              fieldMappings: msg.metadata?.fieldMappings || msg.metadata?.metadata?.fieldMappings,
+              stage: stage,
+            };
+            
+            return {
+              id: msg.id.toString(),
+              role: msg.role,
+              content: msg.content,
+              ui_components: uiComponents,
+              timestamp: msg.created_at,
+              stage: stage,
+              status: 'success',
+              metadata: metadata,
+              next_prompt: msg.metadata?.next_prompt || msg.metadata?.metadata?.next_prompt,
+            };
+          });
+          
+          // After loading history, update accumulated data from the last assistant message
+          const lastAssistantMessage = chatMessages.filter(m => m.role === 'assistant').pop();
+          if (lastAssistantMessage) {
+            const criteria = lastAssistantMessage.metadata?.criteria;
+            const fieldMappings = lastAssistantMessage.metadata?.fieldMappings;
+            const stage = lastAssistantMessage.metadata?.stage;
+            
+            if (criteria && criteria.length > 0) {
+              setAccumulatedCriteria(criteria);
+            }
+            if (fieldMappings && fieldMappings.length > 0) {
+              setAccumulatedFieldMappings(fieldMappings);
+            }
+            if (stage !== undefined) {
+              setCurrentStage(stage);
+            }
+          }
           
           setMessages(chatMessages);
         }
@@ -233,6 +283,57 @@ export default function ConversationalChat({ projectId }: ConversationalChatProp
       console.log('UI Components:', data.ui_components);
       console.log('Metadata:', data.metadata);
 
+      // Extract stage from response
+      const stage = data.stage !== undefined ? data.stage : data.metadata?.stage || currentStage;
+      setCurrentStage(stage);
+
+      // Extract and accumulate criteria, field mappings, and concept mappings
+      let criteria: any[] = [];
+      let fieldMappings: any[] = [];
+      
+      // Check if ui_components contains criteria
+      if (data.ui_components) {
+        if (Array.isArray(data.ui_components)) {
+          data.ui_components.forEach((comp: any) => {
+            if (comp.type === 'criteria_chips' || comp.type === 'criteria_form') {
+              criteria = comp.data || [];
+            } else if (comp.type === 'schema_mapping') {
+              fieldMappings = comp.data || [];
+            }
+          });
+        } else if (typeof data.ui_components === 'object') {
+          if (data.ui_components.type === 'criteria_chips' || data.ui_components.type === 'criteria_form') {
+            criteria = data.ui_components.data || [];
+          } else if (data.ui_components.type === 'schema_mapping') {
+            fieldMappings = data.ui_components.data || [];
+          }
+        }
+      }
+
+      // Also check metadata for criteria (handle nested metadata)
+      if (data.metadata?.criteria) {
+        criteria = data.metadata.criteria;
+      } else if (data.metadata?.metadata?.criteria) {
+        criteria = data.metadata.metadata.criteria;
+      }
+      
+      // Extract field mappings from metadata if not found in ui_components
+      if (fieldMappings.length === 0) {
+        if (data.metadata?.fieldMappings) {
+          fieldMappings = data.metadata.fieldMappings;
+        } else if (data.metadata?.metadata?.fieldMappings) {
+          fieldMappings = data.metadata.metadata.fieldMappings;
+        }
+      }
+
+      // Update accumulated data (merge with existing, preferring newer data)
+      if (criteria.length > 0) {
+        setAccumulatedCriteria(criteria);
+      }
+      if (fieldMappings.length > 0) {
+        setAccumulatedFieldMappings(fieldMappings);
+      }
+
       // Replace loading message with actual response
       setMessages(prev => 
         prev.filter(m => m.id !== loadingMsgId).concat({
@@ -243,7 +344,7 @@ export default function ConversationalChat({ projectId }: ConversationalChatProp
           timestamp: data.timestamp || new Date().toISOString(),
           next_prompt: data.next_prompt,
           status: 'success',
-          metadata: data.metadata
+          metadata: { ...data.metadata, stage, criteria, fieldMappings }
         })
       );
 
@@ -384,34 +485,105 @@ export default function ConversationalChat({ projectId }: ConversationalChatProp
     }));
   };
 
-  const renderUIComponent = (component: any) => {
+  const renderUIComponent = (component: any, message: ChatMessage) => {
     if (!component) return null;
 
     console.log('Rendering UI component:', component);
 
-    switch (component.type) {
-      case 'criteria_chips':
-        return (
-          <div className="my-3 p-4 bg-purple-50 border border-purple-200 rounded-lg">
-            <h4 className="text-sm font-semibold text-purple-900 mb-2">Extracted Criteria</h4>
-            <CriteriaChips criteria={component.data || []} editable={false} />
-          </div>
-        );
+    // Extract stage from message metadata (handle nested metadata)
+    const stage = message.metadata?.stage !== undefined 
+      ? message.metadata.stage 
+      : message.metadata?.metadata?.stage !== undefined
+        ? message.metadata.metadata.stage
+        : message.stage !== undefined
+          ? message.stage
+          : currentStage;
+    
+    // Extract criteria from message metadata (handle nested metadata)
+    const criteria = message.metadata?.criteria 
+      || message.metadata?.metadata?.criteria 
+      || accumulatedCriteria;
+    
+    // Extract field mappings from message metadata (handle nested metadata)
+    const fieldMappings = message.metadata?.fieldMappings 
+      || message.metadata?.metadata?.fieldMappings 
+      || accumulatedFieldMappings;
 
-      case 'criteria_form':
-        return (
-          <div className="my-3 space-y-4 p-4 bg-gray-50 border border-gray-200 rounded-lg">
-            <h4 className="text-sm font-semibold text-gray-900 mb-2">Adjust Criteria Values</h4>
-            {(component.data || []).map((criterion: any) => (
-              <DynamicCriterionComponent
-                key={criterion.id}
-                criterion={criterion}
-                onValueChange={handleValueChange}
-                disabled={loading}
-              />
-            ))}
-          </div>
-        );
+    // Use progressive layout for criteria-related components
+    if (component.type === 'criteria_chips' || component.type === 'criteria_form' || component.type === 'schema_mapping') {
+      // Extract criteria from component or metadata
+      let extractedCriteria = criteria;
+      if (component.type === 'criteria_chips' || component.type === 'criteria_form') {
+        extractedCriteria = component.data || criteria;
+      }
+
+      // Extract field mappings
+      let extractedFieldMappings = fieldMappings;
+      if (component.type === 'schema_mapping') {
+        extractedFieldMappings = component.data || fieldMappings;
+      }
+      
+      // If field mappings are empty but criteria have db_mappings, extract them from criteria
+      if (extractedFieldMappings.length === 0 && extractedCriteria.length > 0) {
+        extractedFieldMappings = extractedCriteria.flatMap((criterion: any) => {
+          const entities = Object.keys(criterion.db_mappings || {});
+          return entities.map((entity: string) => {
+            const dbMapping = criterion.db_mappings[entity];
+            if (dbMapping && dbMapping['table.field']) {
+              const tableField = dbMapping['table.field'];
+              const rankedMatches = dbMapping.ranked_matches || [tableField];
+              
+              return {
+                entity: entity,
+                selected: tableField,
+                options: rankedMatches,
+                attribute: dbMapping.attribute || entity,
+                criterion_text: criterion.text,
+                field_description: dbMapping.field_description || '',
+              };
+            }
+            return null;
+          }).filter(Boolean);
+        });
+      }
+
+      // Concept mappings are in criteria with ui_components
+      const conceptMappings = extractedCriteria.filter((c: any) => 
+        Object.values(c.db_mappings || {}).some((m: any) => m.ui_component)
+      );
+
+      return (
+        <ProgressiveCriteriaLayout
+          criteria={extractedCriteria}
+          fieldMappings={extractedFieldMappings}
+          conceptMappings={conceptMappings}
+          stage={stage}
+          onValueChange={handleValueChange}
+          onFieldMappingChange={(idx, selectedField) => {
+            const changeKey = `mapping_${idx}`;
+            setFieldMappingChanges(prev => {
+              // If resetting to original value, remove from changes
+              const originalMapping = extractedFieldMappings[idx];
+              if (originalMapping && selectedField === originalMapping.selected) {
+                const newChanges = { ...prev };
+                delete newChanges[changeKey];
+                return newChanges;
+              }
+              // Otherwise, update the change
+              return {
+                ...prev,
+                [changeKey]: selectedField
+              };
+            });
+          }}
+          onApplyFieldMappings={applyFieldMappings}
+          fieldMappingChanges={fieldMappingChanges}
+          disabled={loading}
+        />
+      );
+    }
+
+    switch (component.type) {
 
       case 'sql_preview':
         return (
@@ -442,86 +614,6 @@ export default function ConversationalChat({ projectId }: ConversationalChatProp
           </div>
         );
 
-      case 'schema_mapping':
-        const mappingData = component.data || [];
-        const hasChanges = Object.keys(fieldMappingChanges).length > 0;
-        
-        return (
-          <div className="my-3 space-y-4">
-            <div className="p-4 bg-purple-50 border border-purple-200 rounded-lg">
-              <h4 className="font-semibold text-purple-900 mb-3">Field Mappings</h4>
-              <p className="text-sm text-purple-700 mb-4">
-                Review the database fields selected for each criterion. You can change them using the dropdowns below.
-              </p>
-              {mappingData.map((mapping: any, idx: number) => {
-                const changeKey = `mapping_${idx}`;
-                const currentValue = fieldMappingChanges[changeKey] || mapping.selected;
-                const isChanged = fieldMappingChanges[changeKey] && fieldMappingChanges[changeKey] !== mapping.selected;
-                
-                return (
-                  <div key={idx} className={`mb-4 p-3 bg-white rounded border`}>
-                    <div className="mb-2">
-                      <span className="text-xs font-medium text-gray-500 uppercase">Entity:</span>
-                      <span className="ml-2">
-                        <Tag variant="blue" style="light" size="sm">
-                          {mapping.entity}
-                        </Tag>
-                      </span>
-                      {isChanged && (
-                        <span className="ml-2">
-                          <Tag variant="teal" style="light" size="sm">
-                            Modified
-                          </Tag>
-                        </span>
-                      )}
-                    </div>
-                    <div className="mb-2">
-                      <label className="block text-sm font-medium text-gray-700 mb-1">
-                        Select Database Field:
-                      </label>
-                      <select 
-                        className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-purple-500 focus:border-transparent text-sm"
-                        value={currentValue}
-                        onChange={(e) => {
-                          setFieldMappingChanges(prev => ({
-                            ...prev,
-                            [changeKey]: e.target.value
-                          }));
-                        }}
-                        disabled={loading}
-                      >
-                        {(mapping.options || []).map((option: string) => (
-                          <option key={option} value={option}>
-                            {option}
-                          </option>
-                        ))}
-                      </select>
-                    </div>
-                  </div>
-                );
-              })}
-              
-              {hasChanges && (
-                <div className="mt-4 flex gap-2">
-                  <Button
-                    variant="primary"
-                    onClick={() => applyFieldMappings(mappingData)}
-                    disabled={loading}
-                  >
-                    Apply Changes
-                  </Button>
-                  <Button
-                    variant="secondary"
-                    onClick={() => setFieldMappingChanges({})}
-                    disabled={loading}
-                  >
-                    Reset
-                  </Button>
-                </div>
-              )}
-            </div>
-          </div>
-        );
 
       case 'validation_errors':
         return (
@@ -733,9 +825,54 @@ export default function ConversationalChat({ projectId }: ConversationalChatProp
                 </div>
 
                 {/* UI Components */}
-                {message.ui_components && message.status === 'success' && (
-                  <div className="w-full mt-2">
-                    {renderUIComponent(message.ui_components)}
+                {message.status === 'success' && (
+                  <div className="mt-2">
+                    {(() => {
+                      // Extract ui_components from message or metadata
+                      let uiComponents = message.ui_components;
+                      if (!uiComponents && message.metadata) {
+                        // Try to get from metadata
+                        uiComponents = message.metadata.ui_components || message.metadata.metadata?.ui_components;
+                      }
+                      
+                      // If we have ui_components, render them
+                      if (uiComponents) {
+                        return renderUIComponent(uiComponents, message);
+                      }
+                      
+                      // If no ui_components but we have criteria in metadata, show progressive layout
+                      const metadataCriteria = message.metadata?.criteria || message.metadata?.metadata?.criteria;
+                      const metadataStage = message.metadata?.stage || message.metadata?.metadata?.stage || message.stage || currentStage;
+                      
+                      if (metadataCriteria && metadataCriteria.length > 0) {
+                        // Extract field mappings from metadata
+                        const metadataFieldMappings = message.metadata?.fieldMappings || message.metadata?.metadata?.fieldMappings || [];
+                        
+                        return (
+                          <ProgressiveCriteriaLayout
+                            criteria={metadataCriteria}
+                            fieldMappings={metadataFieldMappings}
+                            conceptMappings={metadataCriteria.filter((c: any) => 
+                              Object.values(c.db_mappings || {}).some((m: any) => m.ui_component)
+                            )}
+                            stage={metadataStage}
+                            onValueChange={handleValueChange}
+                            onFieldMappingChange={(idx, selectedField) => {
+                              const changeKey = `mapping_${idx}`;
+                              setFieldMappingChanges(prev => ({
+                                ...prev,
+                                [changeKey]: selectedField
+                              }));
+                            }}
+                            onApplyFieldMappings={applyFieldMappings}
+                            fieldMappingChanges={fieldMappingChanges}
+                            disabled={loading}
+                          />
+                        );
+                      }
+                      
+                      return null;
+                    })()}
                   </div>
                 )}
 

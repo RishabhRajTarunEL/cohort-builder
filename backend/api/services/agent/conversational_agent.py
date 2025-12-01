@@ -1178,70 +1178,98 @@ Keep the response conversational and helpful."""
     
     def _handle_field_mapping_update(self, field_mappings: List[Dict[str, Any]]) -> Dict[str, Any]:
         """
-        Handle updated field mappings from the UI.
+        Handle updated field mappings from the UI (left panel filters).
+        Converts field mappings to criteria and updates agent state.
         
         Args:
-            field_mappings: List of updated field mappings with selected fields
+            field_mappings: List of field mapping dictionaries from database
             
         Returns:
-            Response dict with updated criteria and next stage UI
+            Response dict with updated criteria
         """
         logger.info(f"Processing field mapping update with {len(field_mappings)} mappings")
         
-        # Update criteria with the new field mappings
-        for mapping in field_mappings:
-            entity = mapping.get('entity')
-            selected_field = mapping.get('selected')
-            
-            # Find the criterion that matches this entity
-            for criterion in self.state.criteria:
-                if criterion.get('text', '').lower() == entity.lower() or \
-                   any(e.get('text', '').lower() == entity.lower() for e in criterion.get('entities', [])):
-                    # Update the schema mapping for this criterion
-                    if 'schema_mapping' not in criterion:
-                        criterion['schema_mapping'] = {}
-                    
-                    criterion['schema_mapping']['selected_field'] = selected_field
-                    logger.info(f"Updated field mapping for '{entity}' to '{selected_field}'")
-        
-        # Generate UI components with updated field mappings
-        # Do concept mapping and generate UI components for value selection
         try:
-            from .ui_component_generator import generate_ui_components
+            # Convert field mappings to criteria format
+            new_criteria = []
+            for mapping in field_mappings:
+                table_name = mapping.get('table_name')
+                field_name = mapping.get('field_name')
+                field_type = mapping.get('field_type', 'object')
+                concept = mapping.get('concept', f"{field_name} filter")
+                operator = mapping.get('operator', '=')
+                value = mapping.get('value')
+                sql_criterion = mapping.get('sql_criterion', '')
+                display_text = mapping.get('display_text', concept)
+                
+                if not table_name or not field_name:
+                    continue
+                
+                # Create criterion from field mapping
+                table_field = f"{table_name}.{field_name}"
+                entity_key = field_name.lower().replace('_', ' ')
+                
+                # Determine mapped concept value
+                if isinstance(value, list):
+                    mapped_concept = value
+                elif isinstance(value, dict) and 'min' in value and 'max' in value:
+                    mapped_concept = f"{value['min']}-{value['max']}"
+                else:
+                    mapped_concept = str(value) if value is not None else ''
+                
+                criterion = {
+                    'text': display_text,
+                    'type': 'filter',
+                    'entities': [entity_key],
+                    'db_mappings': {
+                        entity_key: {
+                            'entity_class': 'attribute',
+                            'table.field': table_field,
+                            'ranked_matches': [mapped_concept] if not isinstance(mapped_concept, list) else mapped_concept,
+                            'mapped_concept': mapped_concept,
+                            'mapping_method': 'user_filter',
+                            'field_data_type': field_type,
+                            'current_value': value,
+                            'current_operator': operator,
+                        }
+                    },
+                    'revised_criterion': sql_criterion,
+                    'enabled': True,
+                    'source': mapping.get('source', 'user'),
+                }
+                new_criteria.append(criterion)
             
-            # Map concepts for the updated criteria
-            criteria = self.agent._map_to_concepts(self.state.criteria)
-            
-            # Generate UI components
-            criteria = generate_ui_components(criteria, self.agent.schema, self.agent.concept_df)
-            
-            # Update state
-            self.state.criteria = criteria
-            self.state.concepts_mapped = True
-            self.state.current_stage = 2
+            # Update agent state with new criteria
+            if new_criteria:
+                # Merge with existing criteria or replace if user filters are being applied
+                # For now, we'll replace user-created filters but keep agent-created ones
+                existing_agent_criteria = [c for c in self.state.criteria if c.get('source') != 'user']
+                self.state.criteria = existing_agent_criteria + new_criteria
+                self.state.schema_mapped = True
+                self.state.concepts_mapped = True
+                
+                logger.info(f"Updated criteria with {len(new_criteria)} field mappings. Total criteria: {len(self.state.criteria)}")
             
             return {
-                'response_text': 'Field mappings updated! Now please specify values for each criterion.',
-                'ui_components': {
-                    'type': 'criteria_form',
-                    'data': criteria
-                },
-                'stage': 2,
+                'response_text': f'Applied {len(new_criteria)} filter(s) to the criteria. The query has been updated.',
+                'ui_components': [],
+                'stage': self.state.current_stage,
                 'metadata': {
-                    'criteria': criteria,
-                    'stage': 2,
-                    'status': 'Field mappings updated - ready for value selection'
+                    'criteria': self.state.criteria,
+                    'stage': self.state.current_stage,
+                    'filters_applied': len(new_criteria),
+                    'status': 'Filters applied successfully'
                 }
             }
         except Exception as e:
-            logger.error(f"Error processing updated field mappings: {e}", exc_info=True)
+            logger.error(f"Error processing field mapping update: {e}", exc_info=True)
             return {
-                'response_text': f'Field mappings updated, but encountered an error: {str(e)}',
+                'response_text': f'Applied filters, but encountered an error: {str(e)}',
                 'ui_components': [],
-                'stage': 1,
+                'stage': self.state.current_stage,
                 'metadata': {
                     'criteria': self.state.criteria,
-                    'stage': 1,
+                    'stage': self.state.current_stage,
                     'error': str(e)
                 }
             }

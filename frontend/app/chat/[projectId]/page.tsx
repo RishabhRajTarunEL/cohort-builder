@@ -16,11 +16,13 @@ interface ChatPageProps {
 
 export default function ChatPage({ params }: ChatPageProps) {
   const { projectId } = use(params);
+  const [isSchemaCollapsed, setIsSchemaCollapsed] = useState(false);
   const projectIdNum = parseInt(projectId, 10);
   
   const [isCacheReady, setIsCacheReady] = useState(false);
   const [cacheError, setCacheError] = useState<string | null>(null);
   const [checkingCache, setCheckingCache] = useState(true);
+  const [isFilterCollapsed, setIsFilterCollapsed] = useState(false);
 
   useEffect(() => {
     let pollInterval: NodeJS.Timeout | null = null;
@@ -248,13 +250,31 @@ export default function ChatPage({ params }: ChatPageProps) {
       <div className="flex h-[calc(100vh-4rem)] w-screen overflow-hidden bg-white">
         {/* Left Panel - 20% (Split into two sections) */}
         <div className="w-[20%] border-r border-gray-200 bg-white flex flex-col">
-          {/* Database Schema - Top 50% */}
-          <div className="h-[50%] overflow-y-auto border-b border-gray-200">
-            <DatabaseExplorer projectId={projectId} />
+          {/* Filter Dropdowns - Collapsible */}
+          <div 
+            className={`overflow-hidden border-b border-gray-200 transition-all duration-300 ${
+              isFilterCollapsed ? 'h-auto' : isSchemaCollapsed ? 'flex-1' : 'h-[50%]'
+            }`}
+          >
+            <div className={`overflow-y-auto h-full transition-all duration-300`}>
+              <FilterDropdownPanel 
+                projectId={projectIdNum}
+                isCollapsed={isFilterCollapsed}
+                onCollapseChange={setIsFilterCollapsed}
+              />
+            </div>
           </div>
-          {/* Filter Dropdowns - Bottom 50% */}
-          <div className="h-[50%] overflow-y-auto">
-            <FilterDropdownPanel projectId={projectIdNum} />
+          {/* Database Schema - Collapsible, expands when filters are collapsed */}
+          <div 
+            className={`overflow-hidden transition-all duration-300 ${
+              isSchemaCollapsed ? 'h-auto' : isFilterCollapsed ? 'flex-1' : 'h-[50%]'
+            }`}
+          >
+            <DatabaseExplorer 
+              projectId={projectId} 
+              isCollapsed={isSchemaCollapsed}
+              onCollapseChange={setIsSchemaCollapsed}
+            />
           </div>
         </div>
 

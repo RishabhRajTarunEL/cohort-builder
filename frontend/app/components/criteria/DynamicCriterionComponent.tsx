@@ -31,12 +31,14 @@ interface DynamicCriterionComponentProps {
   criterion: CriterionWithUI;
   onValueChange: (criterionId: string, entity: string, operator: string, value: any) => void;
   disabled?: boolean;
+  hideHeader?: boolean;
 }
 
 export default function DynamicCriterionComponent({ 
   criterion, 
   onValueChange,
-  disabled = false 
+  disabled = false,
+  hideHeader = false
 }: DynamicCriterionComponentProps) {
   const entities = Object.entries(criterion.db_mappings);
 
@@ -56,18 +58,20 @@ export default function DynamicCriterionComponent({
   return (
     <div className="space-y-4">
       {/* Criterion Header */}
-      <div className="p-3 bg-gray-50 border-l-4 border-[#06B6D4] rounded">
-        <div className="flex items-center gap-2 mb-1">
-          <Tag
-            variant={criterion.type === 'include' ? 'purple' : 'orange'}
-            style="dark"
-            size="sm"
-          >
-            {criterion.type === 'include' ? 'INCLUDE' : 'EXCLUDE'}
-          </Tag>
+      {!hideHeader && (
+        <div className="p-3 bg-gray-50 border-l-4 border-[#06B6D4] rounded">
+          <div className="flex items-center gap-2 mb-1">
+            <Tag
+              variant={criterion.type === 'include' ? 'purple' : 'orange'}
+              style="dark"
+              size="sm"
+            >
+              {criterion.type === 'include' ? 'INCLUDE' : 'EXCLUDE'}
+            </Tag>
+          </div>
+          <p className="text-sm font-medium text-gray-700">{criterion.text}</p>
         </div>
-        <p className="text-sm font-medium text-gray-700">{criterion.text}</p>
-      </div>
+      )}
 
       {/* Render UI component for each entity mapping */}
       {entities.map(([entity, mapping]) => {

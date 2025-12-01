@@ -8,6 +8,8 @@ import Tag from '@/app/components/ui/Tag';
 
 interface DatabaseExplorerProps {
   projectId?: string;
+  isCollapsed?: boolean;
+  onCollapseChange?: (collapsed: boolean) => void;
 }
 
 // Helper function to get tag variant based on data type - Polly Palette
@@ -23,13 +25,26 @@ const getDataTypeVariant = (type: string): 'blue' | 'teal' | 'yellow' | 'gray' =
   return 'gray'; // String/text types
 };
 
-export default function DatabaseExplorer({ projectId }: DatabaseExplorerProps) {
+export default function DatabaseExplorer({ projectId, isCollapsed: externalCollapsed, onCollapseChange }: DatabaseExplorerProps) {
   const [tables, setTables] = useState<any[]>([]);
   const [expandedTables, setExpandedTables] = useState<Set<string>>(new Set());
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [isCacheReady, setIsCacheReady] = useState(false);
   const [checkingCache, setCheckingCache] = useState(true);
+  const [internalCollapsed, setInternalCollapsed] = useState(false);
+  
+  // Use external collapse state if provided, otherwise use internal state
+  const isSectionCollapsed = externalCollapsed !== undefined ? externalCollapsed : internalCollapsed;
+  
+  const handleCollapseToggle = () => {
+    const newCollapsed = !isSectionCollapsed;
+    if (onCollapseChange) {
+      onCollapseChange(newCollapsed);
+    } else {
+      setInternalCollapsed(newCollapsed);
+    }
+  };
 
   useEffect(() => {
     if (projectId) {
@@ -174,32 +189,47 @@ export default function DatabaseExplorer({ projectId }: DatabaseExplorerProps) {
   return (
     <div className="flex flex-col h-full">
       {/* Header */}
-      <div className="sticky top-0 bg-white border-b p-4 z-10" style={{ borderColor: '#6B7280' }}>
-        <div className="flex items-center gap-2">
-          <Database className="w-5 h-5" style={{ color: '#8E42EE' }} />
-          <h2 className="text-lg font-semibold" style={{ color: '#111827' }}>
-            Database Schema
-          </h2>
-        </div>
-        {checkingCache || loading ? (
-          <p className="text-xs mt-1" style={{ color: '#6B7280' }}>
-            {checkingCache ? 'Checking cache...' : 'Loading schema...'}
-          </p>
-        ) : (
-          <p className="text-xs mt-1" style={{ color: '#6B7280' }}>
-            {tables.length} tables available
-          </p>
-        )}
-        {error && (
-          <div className="mt-2 flex items-center gap-2 text-xs" style={{ color: '#FF004D' }}>
-            <AlertCircle className="w-3 h-3" />
-            <span>{error}</span>
+      <div className="sticky top-0 bg-white border-b border-gray-200 p-4 z-10">
+        <button
+          onClick={handleCollapseToggle}
+          className="w-full flex items-center justify-between gap-2 hover:opacity-80 transition-opacity"
+        >
+          <div className="flex items-center gap-2">
+            {isSectionCollapsed ? (
+              <ChevronRight className="w-4 h-4" style={{ color: '#6B7280' }} />
+            ) : (
+              <ChevronDown className="w-4 h-4" style={{ color: '#6B7280' }} />
+            )}
+            <Database className="w-5 h-5" style={{ color: '#8E42EE' }} />
+            <h2 className="text-lg font-semibold" style={{ color: '#111827' }}>
+              Database Schema
+            </h2>
           </div>
+        </button>
+        {!isSectionCollapsed && (
+          <>
+            {checkingCache || loading ? (
+              <p className="text-xs mt-1 ml-6" style={{ color: '#6B7280' }}>
+                {checkingCache ? 'Checking cache...' : 'Loading schema...'}
+              </p>
+            ) : (
+              <p className="text-xs mt-1 ml-6" style={{ color: '#6B7280' }}>
+                {tables.length} tables available
+              </p>
+            )}
+            {error && (
+              <div className="mt-2 ml-6 flex items-center gap-2 text-xs" style={{ color: '#FF004D' }}>
+                <AlertCircle className="w-3 h-3" />
+                <span>{error}</span>
+              </div>
+            )}
+          </>
         )}
       </div>
 
       {/* Tables List */}
-      <div className="flex-1 overflow-y-auto p-4">
+      {!isSectionCollapsed && (
+        <div className="flex-1 overflow-y-auto p-4">
         {checkingCache || loading ? (
           <div className="flex items-center justify-center py-8">
             <Loader2 className="w-8 h-8 animate-spin" style={{ color: '#8E42EE' }} />
@@ -238,7 +268,7 @@ export default function DatabaseExplorer({ projectId }: DatabaseExplorerProps) {
 
               {/* Columns */}
               {expandedTables.has(table.name) && (
-                <div className="bg-gray-50 border-t" style={{ borderColor: '#6B7280' }}>
+                <div className="bg-gray-50 border-t border-gray-200">
                   <div className="p-3 space-y-2">
                     {table.columns.map((column: any) => (
                       <div
@@ -292,7 +322,8 @@ export default function DatabaseExplorer({ projectId }: DatabaseExplorerProps) {
           ))}
           </div>
         )}
-      </div>
+        </div>
+      )}
     </div>
   );
 }

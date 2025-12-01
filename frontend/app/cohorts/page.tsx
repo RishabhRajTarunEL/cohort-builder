@@ -6,6 +6,7 @@ import { useRouter } from 'next/navigation';
 import { Folder, MessageSquare, Calendar, Database, Loader2, AlertCircle, Share2, User as UserIcon, X, Edit2, List, Grid } from 'lucide-react';
 import api from '@/app/lib/api';
 import { Button, Alert, Loading } from '@/app/components/ui';
+import Tag from '@/app/components/ui/Tag';
 import EditProjectDialog from '@/app/components/EditProjectDialog';
 
 interface SharedUser {
@@ -407,8 +408,14 @@ export default function CohortsPage() {
                       <td className="px-4 py-3 text-sm font-medium text-primary">
                         {project.name}
                       </td>
-                      <td className="px-4 py-3 text-sm text-text-light max-w-xs truncate" title={project.title}>
-                        {project.title || 'No queries yet'}
+                      <td className="px-4 py-3 text-sm text-text-light max-w-xs">
+                        {project.title ? (
+                          <Tag variant="blue" style="light" size="sm">
+                            {project.title}
+                          </Tag>
+                        ) : (
+                          <span className="text-text-light">No queries yet</span>
+                        )}
                       </td>
                       <td className="px-4 py-3 text-sm text-text font-medium">
                         {project.total_chats ?? 0}
@@ -455,7 +462,8 @@ export default function CohortsPage() {
               {sortedProjects.map((project) => (
               <div
                 key={project.id}
-                className="card hover:shadow-lg transition-all duration-300 group"
+                className="card hover:shadow-lg transition-all duration-300 group cursor-pointer"
+                onClick={() => handleProjectClick(project)}
               >
                 {/* Icon and Actions */}
                 <div className="flex items-start justify-between mb-5">
@@ -491,23 +499,21 @@ export default function CohortsPage() {
                   </div>
                 </div>
 
+                {/* Title */}
+                {project.title && (
+                  <div className="mb-3">
+                    <Tag variant="blue" style="light" size="sm" className="line-clamp-2">
+                      {project.title}
+                    </Tag>
+                  </div>
+                )}
                 {/* Project Name */}
                 <h3 
-                  onClick={() => handleProjectClick(project)}
-                  className="text-xl font-bold mb-2 group-hover:text-primary-dark transition-colors text-primary cursor-pointer"
+                  className="text-xl font-bold mb-2 group-hover:text-primary-dark transition-colors text-primary"
                 >
                   {project.name}
                 </h3>
 
-                {/* Title */}
-                {project.title && (
-                  <div className="mb-3">
-                    <p className="text-xs font-semibold text-text-light uppercase mb-1">Title</p>
-                    <p className="text-sm text-text line-clamp-2">
-                      {project.title}
-                    </p>
-                  </div>
-                )}
 
                 {/* Description */}
                 {project.description && (
