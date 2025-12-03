@@ -16,7 +16,7 @@ interface ChatPageProps {
 
 export default function ChatPage({ params }: ChatPageProps) {
   const { projectId } = use(params);
-  const [isSchemaCollapsed, setIsSchemaCollapsed] = useState(false);
+  const [isSchemaCollapsed, setIsSchemaCollapsed] = useState(true);
   const projectIdNum = parseInt(projectId, 10);
   
   const [isCacheReady, setIsCacheReady] = useState(false);

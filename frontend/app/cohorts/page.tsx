@@ -410,9 +410,13 @@ export default function CohortsPage() {
                       </td>
                       <td className="px-4 py-3 text-sm text-text-light max-w-xs">
                         {project.title ? (
-                          <Tag variant="blue" style="light" size="sm">
-                            {project.title}
-                          </Tag>
+                          <div className="mb-3 w-full overflow-hidden">
+                          <div className="inline-block max-w-full">
+                            <Tag variant="blue" style="light" size="sm">
+                              {project.title}
+                            </Tag>
+                          </div>
+                        </div>
                         ) : (
                           <span className="text-text-light">No queries yet</span>
                         )}
